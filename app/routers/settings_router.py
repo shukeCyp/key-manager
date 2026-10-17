@@ -64,7 +64,7 @@ async def setup_otp(
     _pending_otp[str(admin.id)] = secret
 
     totp = pyotp.TOTP(secret)
-    uri = totp.provisioning_uri(name=admin.username, issuer_name="卡密管理系统")
+    uri = totp.provisioning_uri(name=admin.username, issuer_name="TK剪辑器")
     img = qrcode.make(uri)
     buf = io.BytesIO()
     img.save(buf, format="PNG")

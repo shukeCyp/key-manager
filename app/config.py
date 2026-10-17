@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     LICENSE_LEASE_SECONDS: int = 300
     CLIENT_IP_REQUESTS_PER_MINUTE: int = 1800
     CLIENT_DEVICE_REQUESTS_PER_MINUTE: int = 120
-    SUITE_APP_CODE: str = "SHAOHUA_SUITE"
-    SUITE_APP_NAME: str = "韶华软件全家桶"
+    SUITE_APP_CODE: str = "TK_EDITOR"
+    SUITE_APP_NAME: str = "TK剪辑器"
 
     def validate_production(self):
         if self.ENVIRONMENT != "production":

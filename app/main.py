@@ -84,7 +84,7 @@ async def lifespan(app: FastAPI):
         from app.dependencies import set_setting
         if not db.query(Application).filter_by(app_code=app_settings.SUITE_APP_CODE).first():
             db.add(Application(name=app_settings.SUITE_APP_NAME, app_code=app_settings.SUITE_APP_CODE,
-                               description="所有系列软件共用此产品编号、卡密和机器码；在任意软件激活后统一计时。"))
+                               description="TK剪辑器卡密授权；首次激活后开始计时，按设备数量授权。"))
             db.commit()
         # Seed settings if missing
         if not get_setting(db, "api_prefix"):

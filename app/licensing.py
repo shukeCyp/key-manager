@@ -15,6 +15,10 @@ def authorize(db, req, ip):
     if db.bind.dialect.name == "sqlite":
         db.connection().exec_driver_sql("BEGIN IMMEDIATE")
     app = db.query(Application).filter_by(app_code=req.app_code).first()
+    # Preserve licenses and older SDKs after the application's display/code rename.
+    if app is None and req.app_code == "SHAOHUA_SUITE":
+        from app.config import settings
+        app = db.query(Application).filter_by(app_code=settings.SUITE_APP_CODE).first()
     key = db.query(Key).filter_by(key_code=req.key_code).with_for_update().first()
     if not app or not key or key.app_id != app.id:
         db.rollback()

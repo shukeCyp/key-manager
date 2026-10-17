@@ -1,5 +1,5 @@
 [Unit]
-Description=Shaohua suite licensing server
+Description=TK Editor licensing server
 After=network.target
 
 [Service]

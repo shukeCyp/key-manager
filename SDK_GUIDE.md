@@ -1,19 +1,19 @@
-# 韶华软件全家桶 Python 接入
+# TK剪辑器 Python 接入
 
-服务器：`https://tk.shaohua.fun`，产品编号：`SHAOHUA_SUITE`。
+服务器：`https://tk.shaohua.fun`，产品编号：`TK_EDITOR`。
 
-后台「Python 软件接入」页面提供当前服务器的公钥和可复制示例。把交付包里的 `shaohua_license.py` 放进所有软件项目；每个软件只修改 `client_name`。所有软件必须使用相同产品编号、公钥和机器码生成规则。
+后台「Python 软件接入」页面提供当前服务器的公钥和可复制示例。把交付包里的 `tk_license.py` 放进 TK剪辑器项目，使用接入包预设的产品编号、公钥和机器码生成规则。
 
 安装：`pip install -r sdk/requirements.txt`。
 
 ```python
-from shaohua_license import LicenseClient, LicenseError
+from tk_license import LicenseClient, LicenseError
 
 client = LicenseClient(
     server_url="https://tk.shaohua.fun",
-    app_code="SHAOHUA_SUITE",
+    app_code="TK_EDITOR",
     public_key="从后台 Python 软件接入页面复制公钥",
-    client_name="我的软件A",
+    client_name="TK剪辑器",
 )
 
 try:
@@ -33,8 +33,8 @@ finally:
 
 后台心跳每 60 秒执行一次真正的 `verify()`。服务端明确拒绝会立即使本地授权失效；网络中断时已获得的授权最多持续当前租期（默认 300 秒，且不超过卡密实际到期时间）。`require_valid()` 是业务操作前的必需检查，不会自动退出进程。长任务须在可中断的循环中再次检查。`on_error` 在后台线程运行；Qt/Tk 等 GUI 请通过信号/消息队列更新界面。
 
-授权绑定设备数量，而非同时运行的软件进程数量。同一电脑打开 A、B、C 三个软件共用一个名额。设备离线不会自动解绑；管理员在卡密详情里解绑。Windows 主要使用 MachineGuid，Linux 使用 machine-id，macOS 使用平台 UUID；重装系统可能需要解绑。设备码由客户端提交，无法阻止有意伪造客户端的攻击者。
+授权绑定设备数量，而非同时运行的软件进程数量。同一电脑重复运行 TK剪辑器只占一个名额。设备离线不会自动解绑；管理员在卡密详情里解绑。Windows 主要使用 MachineGuid，Linux 使用 machine-id，macOS 使用平台 UUID；重装系统可能需要解绑。设备码由客户端提交，无法阻止有意伪造客户端的攻击者。
 
-自定义天数从第一次成功激活开始计时，新增软件不会重置到期时间。禁用卡密会影响所有系列软件；后台续期不会自动解除禁用状态。
+自定义天数从第一次成功激活开始计时，升级客户端不会重置到期时间。禁用卡密会阻止 TK剪辑器授权验证；后台续期不会自动解除禁用状态。
 
 不向客户端分发签名私钥、后台密码或 JWT 密钥。完全运行在本地的 Python 代码仍可被修改；高价值的服务端接口也需要独立验证授权。

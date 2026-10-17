@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily Shaohua license backup
+Description=Daily TK Editor license backup
 [Timer]
 OnCalendar=*-*-* 02:35:00 Asia/Shanghai
 RandomizedDelaySec=300

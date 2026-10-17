@@ -1,5 +1,5 @@
 [Unit]
-Description=Renew TLS certificate for Shaohua licensing
+Description=Renew TLS certificate for TK Editor licensing
 After=network-online.target
 [Service]
 Type=oneshot

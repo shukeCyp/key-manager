@@ -10,7 +10,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?Set a random JWT secret}
       - DATABASE_URL=sqlite:////app/data/app.db
       - SIGNING_KEY_PATH=/app/data/signing-key.pem
-      - SUITE_APP_CODE=SHAOHUA_SUITE
+      - SUITE_APP_CODE=TK_EDITOR
       - ENABLE_LEGACY_AUTH=false
     ports:
       - "127.0.0.1:8000:8000"

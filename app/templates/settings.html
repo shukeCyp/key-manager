@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}系统设置 — 韶华授权中心{% endblock %}
+{% block title %}系统设置 — TK剪辑器授权管理{% endblock %}
 
 {% block content %}
 <h1 class="text-2xl font-bold mb-6">系统设置</h1>
@@ -85,7 +85,7 @@
         <h2 class="text-lg font-bold mb-2">修改管理员密码</h2>
         <div class="space-y-3 max-w-xs">
             <input type="password" id="old-pwd" placeholder="原密码" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <input type="password" id="new-pwd" placeholder="新密码（至少6位）" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <input type="password" id="new-pwd" placeholder="新密码（至少12位）" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <button onclick="changePwd()" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-800">修改密码</button>
         </div>
     </div>
@@ -139,7 +139,7 @@ async function changePwd() {
     const oldPwd = document.getElementById('old-pwd').value;
     const newPwd = document.getElementById('new-pwd').value;
     if (!oldPwd || !newPwd) return showToast('请填写完整', 'warning');
-    if (newPwd.length < 6) return showToast('新密码至少6位', 'warning');
+    if (newPwd.length < 12) return showToast('新密码至少12位', 'warning');
     try {
         const result = await AUTH.post(apiUrl('/auth/change-password'), {
             old_password: oldPwd, new_password: newPwd,

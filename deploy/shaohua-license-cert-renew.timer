@@ -1,5 +1,5 @@
 [Unit]
-Description=Check Shaohua TLS certificate renewal twice daily
+Description=Check TK Editor TLS certificate renewal twice daily
 [Timer]
 OnCalendar=*-*-* 03,15:15:00 Asia/Shanghai
 RandomizedDelaySec=3600

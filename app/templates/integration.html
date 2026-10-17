@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Python 接入 — 韶华授权中心{% endblock %}
+{% block title %}Python 接入 — TK剪辑器授权管理{% endblock %}
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Python 软件接入</h1>
 <div class="bg-white rounded-lg shadow p-6 mb-4">
-    <p class="mb-4">系列软件共用一个产品编号、一套卡密和同一机器码。用户在任意软件首次激活后统一计时，同一电脑运行多个软件只占一个设备名额。</p>
+    <p class="mb-4">TK剪辑器使用统一的产品编号和卡密。用户首次激活后开始计时，同一电脑重复验证只占一个设备名额。</p>
     <p class="mb-2">产品编号：<code id="suite-code"></code></p>
     <p class="mb-2">验证接口：<code id="verify-url"></code></p>
     <p class="mb-2">签名公钥（放入客户端）：</p>
@@ -33,7 +33,7 @@ client = LicenseClient(
     server_url=${JSON.stringify(location.origin)},
     app_code=${JSON.stringify(info.app_code)},
     public_key=${JSON.stringify(info.public_key)},
-    client_name="你的软件名称",  # 各软件仅修改此处
+    client_name="TK剪辑器"
 )
 try:
     info = client.verify(input("请输入卡密：").strip())
