@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="卡密管理系统",
-    version="2.0.0",
+    version="3.0.0",
     lifespan=lifespan,
     docs_url="/docs" if app_settings.ENABLE_API_DOCS else None,
     redoc_url=None,
