@@ -1,11 +1,15 @@
 import os
+from pathlib import Path
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 from app.config import settings
 
-# Ensure data directory exists
-os.makedirs("data", exist_ok=True)
+# Only create the configured database directory. Production code is read-only.
+db_url = make_url(settings.DATABASE_URL)
+if db_url.drivername.startswith("sqlite") and db_url.database and db_url.database != ":memory:":
+    Path(db_url.database).parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(
     settings.DATABASE_URL,
