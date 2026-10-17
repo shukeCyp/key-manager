@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}系统设置 — 卡密管理系统{% endblock %}
+{% block title %}系统设置 — 韶华授权中心{% endblock %}
 
 {% block content %}
 <h1 class="text-2xl font-bold mb-6">系统设置</h1>
@@ -9,7 +9,7 @@
     <!-- API Prefix -->
     <div class="bg-white rounded-lg shadow p-6">
         <h2 class="text-lg font-bold mb-2">API 路由前缀</h2>
-        <p class="text-sm text-gray-500 mb-3">修改后立即生效（AJAX 请求使用新前缀）。已打开的页面需刷新。不影响 <code class="bg-gray-100 px-1 rounded">/api/client/auth</code>。</p>
+        <p class="text-sm text-gray-500 mb-3">修改后立即生效（AJAX 请求使用新前缀）。已打开的页面需刷新。不影响 <code class="bg-gray-100 px-1 rounded">/api/client/verify</code>。</p>
         <div class="flex gap-2">
             <input type="text" id="api-prefix" class="flex-1 border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="/api">
             <button onclick="savePrefix()" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-800">保存</button>

@@ -24,6 +24,7 @@ def _serialize_key(key: Key) -> dict:
         "batch_id": key.batch_id,
         "app_id": key.app_id,
         "key_type": key.key_type,
+        "duration_days": key.duration_days,
         "device_limit": key.device_limit,
         "status": key.status,
         "start_time": key.start_time.strftime("%Y-%m-%d %H:%M:%S") if key.start_time else None,
@@ -187,6 +188,7 @@ async def restore_batch(
             continue
 
         key = Key(
+            duration_days=kd.get("duration_days"),
             key_code=kd["key_code"],
             batch_id=kd.get("batch_id"),
             app_id=kd["app_id"],

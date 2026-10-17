@@ -1,231 +1,60 @@
-# 卡密管理系统
+# 韶华授权中心
 
-软件许可证密钥管理平台。管理后台可视化操作 + 客户端 API 验证卡密。
+基于 [2574533879/key-manager](https://github.com/2574533879/key-manager) 的 MIT fork，供一系列 Python 软件共用卡密。管理后台位于 https://tk.shaohua.fun ，客户端使用独立的签名验证接口。
 
-## 技术栈
+## 已完成的改造
 
-| 层级 | 技术 |
-|------|------|
-| 后端框架 | FastAPI |
-| 模板引擎 | Jinja2 |
-| 数据库 | SQLite（SQLAlchemy ORM） |
-| 认证 | JWT + TOTP 两步验证 |
-| 前端样式 | Tailwind CSS（build_css.py 生成） |
-| 部署 | Docker / Docker Compose |
+- 自动建立「韶华软件全家桶」，产品编号 `SHAOHUA_SUITE`；不同软件共用卡密、到期时间和设备名额。
+- 自定义卡从首次激活计时；续期保留卡号，已过期卡从续期时重新计算，禁用状态保持。
+- SQLite WAL、写事务和设备唯一索引避免并发激活超额。
+- Ed25519 签名响应，绑定随机数、卡密摘要、产品、机器码及软件名称，短期授权默认 300 秒。
+- 统一 Python SDK，真正的联网复验心跳和单调时钟授权期限；旧版无签名接口默认关闭。
+- 使用安全随机数生成卡密，加入输入校验、两级限流、生产配置检查。
+- 管理密码使用 Argon2，兼容原 bcrypt；区分 access/refresh token，修改密码会撤销旧令牌。
+- 后台增加续期和 Python 接入页面，修正在线筛选分页与分页数量。
+- 更新并锁定依赖，增加自动化测试、systemd 服务、Nginx HTTPS 配置及每日备份模板。
 
-## 项目结构
+## Python 接入
 
-```
-卡密管理系统/
-├── app/
-│   ├── main.py                # 应用入口，动态前缀中间件
-│   ├── config.py               # 环境变量配置
-│   ├── database.py             # 数据库引擎 & Session
-│   ├── models.py               # 5 张数据表
-│   ├── schemas.py              # Pydantic 请求/响应模型
-│   ├── dependencies.py         # JWT、限流、设置读写
-│   ├── routers/
-│   │   ├── auth.py             # 管理端登录 & OTP 验证
-│   │   ├── client.py           # 客户端卡密认证（固定路径）
-│   │   ├── applications.py     # 应用 CRUD
-│   │   ├── keys.py             # 卡密 CRUD、筛选、导出、批次管理
-│   │   ├── dashboard.py        # 仪表盘统计
-│   │   ├── settings_router.py  # 系统设置 & OTP 管理
-│   │   ├── recycle.py          # 回收站
-│   │   └── pages.py            # Web 页面路由
-│   ├── templates/              # 8 个 Jinja2 页面
-│   └── static/
-│       └── tailwind.min.css
-├── build_css.py                # CSS 构建脚本
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── API接口文档.md               # 全部 API 文档
-├── 设计文档.md                  # 架构设计文档
-└── 客户端调用文档.md             # 客户端认证接口说明
-```
+见 [SDK_GUIDE.md](SDK_GUIDE.md)。后台「Python 软件接入」提供本服务器公钥及示例。所有系列软件使用相同 `app_code`，仅 `client_name` 不同；不要在后台分别创建产品后期望卡密自动跨产品使用。
 
-## 功能设计
+## 开发与测试
 
-### 管理后台（Web 界面）
-- **仪表盘** — 全局统计 + 每应用卡片（卡密数、在线数、已过期、即将过期、绑定设备数）
-<img width="1912" height="914" alt="image" src="https://github.com/user-attachments/assets/822ec52c-092a-449f-b244-bc773439f417" />
-- **应用管理** — 增删改查，自定义 app_code
-<img width="1912" height="914" alt="image" src="https://github.com/user-attachments/assets/ba9920a9-ee1c-49af-9c9b-6d7a94d5d2f4" />
-- **卡密管理** — 批量生成（前缀/后缀/自定义天数）、全字段筛选、多选批量删除、批次分组、CSV 导出（含设备码）
-<img width="1912" height="914" alt="image" src="https://github.com/user-attachments/assets/90e855c0-3cc1-48b2-b0aa-32d914e5f4bb" />
-- **回收站** — 按批次恢复或永久删除
-<img width="1912" height="914" alt="image" src="https://github.com/user-attachments/assets/8f69421c-592d-43b6-88c2-84bebab5e532" />
-- **系统设置** — API 路由前缀、心跳阈值、OTP 安全配置
-<img width="1912" height="914" alt="image" src="https://github.com/user-attachments/assets/b81ab221-8d29-4222-bece-7ad129b181db" />
+Python 3.11 / 3.12。安装 `requirements.txt` 后运行：
 
-
-
-### 客户端 API
-- `/api/client/auth` — 卡密验证 + 设备绑定 + 心跳（固定路径，不受前缀影响）
-
-### 安全特性
-- JWT 双令牌（Access 2h + Refresh 7d）
-- TOTP 两步验证（支持 Google Authenticator）
-- 动态 API 路由前缀（防目录爆破）
-- bcrypt 密码哈希
-- 登录/OTP 频率限制 & 锁定
-
-## 本地开发
-
-```bash
-# 创建虚拟环境
-python -m venv venv && source venv/bin/activate  # Linux
-# 或 python -m venv venv && venv\Scripts\activate  # Windows
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 生成 CSS
+```sh
+pip install -r requirements.txt pytest 'httpx>=0.28,<1' requests
+python -m pytest -q
 python build_css.py
-
-# 启动
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-访问 `http://127.0.0.1:8000`，默认账号 `admin` / `admin123`。
+开发模式缺省管理员沿用上游设置；公网部署必须设置 `ENVIRONMENT=production`、随机管理员密码及 JWT 密钥。`.env.example` 只作为配置格式参考。生产服务使用单个 Uvicorn worker；当前进程内限流不会跨 worker 共享。
 
-修改模板样式后重新运行 `python build_css.py` 即可更新 CSS。
+## 服务器运维
 
-## Docker 部署
+部署模板在 [deploy/](deploy/)。当前服务器按独立服务部署：
 
-### 方式一：docker-compose（推荐）
+- 程序 `/opt/shaohua-license/current`，虚拟环境 `/opt/shaohua-license/venv`。
+- 配置 `/etc/shaohua-license.env`（root 可读），数据与签名私钥 `/var/lib/shaohua-license/`。
+- 服务 `shaohua-license.service`，仅监听 `127.0.0.1:8810`，由域名 Nginx 转发。
+- `GET /healthz` 提供健康检查；正式 API 为 `POST /api/client/verify`。
+- 每日北京时间 02:35 左右备份数据库、配置与签名私钥到 `/var/backups/shaohua-license/`，保留 14 天。备份仍在同一服务器，建议另行复制至你控制的存储。
 
-```bash
-# 1. 修改环境变量
-cp .env .env.prod
-vim .env.prod    # 改 ADMIN_PASSWORD 和 JWT_SECRET
+常用命令：
 
-# 2. 启动
-docker-compose --env-file .env.prod up -d
-
-# 3. 查看日志
-docker-compose logs -f
-
-# 4. 停止
-docker-compose down
-
-docker-compose.yml
-services:
-  key-manager:
-    image: key-manager:latest   
-    container_name: key-manager
-    environment:
-      - TZ=Asia/Shanghai
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
-      - JWT_SECRET=${JWT_SECRET:-change-me-to-a-random-secret}
-      - DATABASE_URL=sqlite:////app/data/app.db
-    ports:
-      - "2052:8000"
-    volumes:
-      - ./data:/app/data
-      - ./.env:/.env
-    restart: unless-stopped
-
-```
-数据库持久化在 `./data/app.db`，容器删除后数据不丢失。
-
-### 方式二：手动构建镜像
-
-```bash
-# 构建镜像
-docker build -t key-manager:latest .
-
-# 运行容器
-docker run -d \
-  --name key-manager \
-  -p 8000:8000 \
-  -v $(pwd)/data:/app/data \
-  -e ADMIN_USERNAME=admin \
-  -e ADMIN_PASSWORD=your_strong_password \
-  -e JWT_SECRET=your_random_secret \
-  -e TZ=Asia/Shanghai \
-  --restart unless-stopped \
-  key-manager:latest
+```sh
+systemctl status shaohua-license
+journalctl -u shaohua-license -n 100 --no-pager
+systemctl restart shaohua-license
+systemctl start shaohua-license-backup
+systemctl list-timers shaohua-license-backup.timer
 ```
 
-### 导出镜像（离线部署）
+升级前手动备份并保存当前 release。更新程序后重启服务、检查 `/healthz`。恢复时停止服务，将数据库和签名私钥一起恢复，保证 `shaohua-license` 用户可读写，然后重新启动。签名私钥变化后，旧软件内置的公钥将无法验证新响应，必须妥善保留原私钥。
 
-```bash
-# 构建后导出
-docker build -t key-manager:latest .
-docker save key-manager:latest | gzip > key-manager.tar.gz
+## 授权边界
 
-# 在目标机器导入
-docker load < key-manager.tar.gz
-mkdir ./data
-chmod 777 ./data
+同一机器运行多个软件共用设备名额；离线不自动释放设备。服务端拒绝会在下一次成功联网复验时生效；断网最多保留当前短期租期。客户端本地代码和机器码均可被修改，签名协议不能保证软件无法破解。
 
-docker-compose.yml
-services:
-  key-manager:
-    image: key-manager:latest   
-    container_name: key-manager
-    environment:
-      - TZ=Asia/Shanghai
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
-      - JWT_SECRET=${JWT_SECRET:-change-me-to-a-random-secret}
-      - DATABASE_URL=sqlite:////app/data/app.db
-    ports:
-      - "2052:8000"
-    volumes:
-      - ./data:/app/data
-      - ./.env:/app/.env
-    restart: unless-stopped
-
-
-# 密钥随机生成
-python -c "import secrets; print(secrets.token_hex(32))"
-# 修改token密钥
-vi .env
-
-JWT_SECRET=change-me-to-a-random-secret-in-production
-DATABASE_URL=sqlite:///./data/app.db
-
-# 重启容器
-docker-compose up -d
-```
-
-## 客户端接入
-
-参见 [客户端调用文档.md](客户端调用文档.md)，核心接口：
-
-```
-POST /api/client/auth
-{
-    "machine_code": "32位MD5机器码",
-    "key_code": "卡密",
-    "app_code": "应用编号",
-    "ip_address": "可选"
-}
-```
-
-Python 示例：
-
-```python
-import requests
-
-resp = requests.post("http://your-server:8000/api/client/auth", json={
-    "machine_code": "1A2B3C4D5E6F7G8H9I0J1K2L3M4N5O6P",
-    "key_code": "YOUR-KEY-CODE",
-    "app_code": "YOUR-APP-CODE",
-})
-print(resp.json())
-```
-
-## 环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| ADMIN_USERNAME | admin | 管理员用户名（首次启动创建） |
-| ADMIN_PASSWORD | admin123 | 管理员密码（生产环境务必修改） |
-| JWT_SECRET | change-me... | JWT 签名密钥（生产环境务必修改） |
-| DATABASE_URL | sqlite:///./data/app.db | 数据库路径 |
-| TZ | Asia/Shanghai | 时区 |
+保留上游 MIT [LICENSE](LICENSE)。

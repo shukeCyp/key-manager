@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}卡密管理 — 卡密管理系统{% endblock %}
+{% block title %}卡密管理 — 韶华授权中心{% endblock %}
 
 {% block head %}
 <style>
@@ -23,6 +23,7 @@
 
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">卡密管理</h1>
+<p class="text-sm text-gray-500 mb-4">全家桶卡密请选择「韶华软件全家桶」。有效天数从首次激活计算；同一电脑使用多个系列软件共用一个设备名额。</p>
 
 <!-- Filters -->
 <div class="bg-white rounded-lg shadow p-4 mb-4">
@@ -161,7 +162,7 @@
                 <div class="flex-1"><label class="block text-sm font-medium text-gray-700 mb-1">后缀（可选）</label>
                     <input type="text" id="gen-suffix" placeholder="如 -2024" class="w-full border rounded-lg px-3 py-2"></div>
             </div>
-            <div><label class="block text-sm font-medium text-gray-700 mb-1">过期天数（留空=按类型默认）</label>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">激活后有效天数（留空=按类型默认）</label>
                 <input type="number" id="gen-expire" placeholder="留空使用默认" min="1" class="w-full border rounded-lg px-3 py-2">
             </div>
         </div>
@@ -209,6 +210,17 @@
 {% block scripts %}
 <script>
 let currentPage = 1, currentPageSize = 20;
+
+async function extendKey(id) {
+    const answer = prompt('增加多少天有效期？未激活卡会增加首次激活后的使用天数。', '30');
+    if (answer === null) return;
+    const days = Number(answer);
+    if (!Number.isInteger(days) || days < 1 || days > 36500) { showToast('请输入 1 至 36500 的整数', 'error'); return; }
+    try {
+        await AUTH.post(apiUrl(`/keys/${id}/extend`), {days});
+        showToast('续期成功'); loadKeys(currentPage);
+    } catch (e) { showToast(e.message, 'error'); }
+}
 
 function changePageSize() {
     currentPageSize = parseInt(document.getElementById('page-size-select').value);
@@ -275,12 +287,13 @@ async function loadKeys(page = 1) {
                 <td class="px-3 py-2 text-right">
                     <a href="/keys/${k.id}" class="text-blue-600 hover:underline text-xs mr-2">详情</a>
                     <button onclick="editKey(${k.id})" class="text-blue-600 hover:underline text-xs mr-2">编辑</button>
+                    <button onclick="extendKey(${k.id})" class="text-blue-600 hover:underline text-xs mr-2">续期</button>
                     <button onclick="delKey(${k.id}, '${esc(k.key_code)}')" class="text-red-600 hover:underline text-xs">删除</button>
                 </td>
             </tr>
         `).join('');
         document.getElementById('total-count').textContent = `共 ${data.total} 张卡密`;
-        document.getElementById('pagination').innerHTML = paginationHTML(data.total, page, 20);
+        document.getElementById('pagination').innerHTML = paginationHTML(data.total, page, currentPageSize);
     } catch(e) { showToast(e.message, 'error'); }
 }
 

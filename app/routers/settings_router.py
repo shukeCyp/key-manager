@@ -12,11 +12,10 @@ from app.models import Admin
 from app.schemas import SettingsUpdate, SettingsResponse
 from app.dependencies import get_current_admin, get_setting, set_setting
 from app.config import settings as app_settings
-from passlib.context import CryptContext
+from app.passwords import pwd_context
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.get("", response_model=SettingsResponse)
@@ -140,6 +139,11 @@ async def update_settings(
             prefix = "/" + prefix
         # strip trailing slash
         prefix = prefix.rstrip("/")
+        import re
+        if not re.fullmatch(r"/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", prefix):
+            raise HTTPException(status_code=400, detail="请输入有效路径，例如 /manage-api")
+        if prefix != "/api" and prefix.split("/")[1] in {"api", "__admin", "static", "healthz", "login", "applications", "keys", "settings", "integration", "logout", "recycle-bin"}:
+            raise HTTPException(status_code=400, detail="该路径与系统页面或客户端接口冲突")
         set_setting(db, "api_prefix", prefix)
 
     if data.heartbeat_threshold_minutes is not None:

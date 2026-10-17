@@ -1,7 +1,7 @@
 import datetime
 import uuid
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, ForeignKey, Boolean, func
+    Column, Integer, String, Text, DateTime, ForeignKey, Boolean, func, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -22,6 +22,7 @@ class Admin(Base):
     username = Column(String(64), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
     otp_secret = Column(String(32), nullable=True)  # TOTP secret, None = not enabled
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
 
 
 class Setting(Base):
@@ -56,6 +57,7 @@ class Key(Base):
     status = Column(String(16), default="active")  # "active", "used", "expired", "disabled"
     start_time = Column(DateTime, nullable=True)  # set on first use
     expire_time = Column(DateTime, nullable=True)
+    duration_days = Column(Integer, nullable=True)  # Starts at first successful activation
     created_at = Column(DateTime, default=now)
 
     application = relationship("Application", back_populates="keys")
@@ -64,11 +66,13 @@ class Key(Base):
 
 class DeviceBinding(Base):
     __tablename__ = "device_bindings"
+    __table_args__ = (UniqueConstraint("key_id", "machine_code", name="uq_key_machine"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     key_id = Column(Integer, ForeignKey("keys.id", ondelete="CASCADE"), nullable=False)
     machine_code = Column(String(64), nullable=False)
     ip_address = Column(String(45), default="")
+    client_name = Column(String(64), default="")
     first_seen = Column(DateTime, default=now)
     last_heartbeat = Column(DateTime, default=now, onupdate=now)
 

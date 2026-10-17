@@ -11,11 +11,10 @@ from app.schemas import LoginRequest, TokenResponse, RefreshRequest, ChangePassw
 from app.dependencies import (
     create_token, get_current_admin, check_rate_limit, get_setting,
 )
-from passlib.context import CryptContext
+from app.passwords import pwd_context
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 _LOGIN_FAIL = "用户名或密码或动态码错误"
 
@@ -67,11 +66,11 @@ async def login(req: LoginRequest, request: Request, db: Session = Depends(get_d
 
     # Issue tokens
     access_token = create_token(
-        {"sub": str(admin.id)},
+        {"sub": str(admin.id), "type": "access", "ver": admin.token_version},
         datetime.timedelta(minutes=app_settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     refresh_token = create_token(
-        {"sub": str(admin.id), "type": "refresh"},
+        {"sub": str(admin.id), "type": "refresh", "ver": admin.token_version},
         datetime.timedelta(days=app_settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
     return TokenResponse(access_token=access_token, refresh_token=refresh_token).model_dump()
@@ -79,7 +78,8 @@ async def login(req: LoginRequest, request: Request, db: Session = Depends(get_d
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(req: RefreshRequest, db: Session = Depends(get_db)):
-    from jose import jwt, JWTError, ExpiredSignatureError
+    import jwt
+    from jwt import InvalidTokenError as JWTError, ExpiredSignatureError
     try:
         payload = jwt.decode(
             req.refresh_token, app_settings.JWT_SECRET,
@@ -90,19 +90,19 @@ async def refresh(req: RefreshRequest, db: Session = Depends(get_db)):
         admin_id = int(payload.get("sub"))
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="令牌已过期")
-    except JWTError:
+    except (JWTError, ValueError, TypeError):
         raise HTTPException(status_code=401, detail="令牌无效")
 
     admin = db.query(Admin).filter(Admin.id == admin_id).first()
-    if not admin:
+    if not admin or payload.get("ver") != admin.token_version:
         raise HTTPException(status_code=401, detail="令牌无效")
 
     access_token = create_token(
-        {"sub": str(admin.id)},
+        {"sub": str(admin.id), "type": "access", "ver": admin.token_version},
         datetime.timedelta(minutes=app_settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     refresh_token = create_token(
-        {"sub": str(admin.id), "type": "refresh"},
+        {"sub": str(admin.id), "type": "refresh", "ver": admin.token_version},
         datetime.timedelta(days=app_settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
@@ -116,8 +116,9 @@ async def change_password(
 ):
     if not pwd_context.verify(req.old_password, admin.password_hash):
         raise HTTPException(status_code=400, detail="原密码错误")
-    if len(req.new_password) < 6:
-        raise HTTPException(status_code=400, detail="新密码长度不能少于6位")
+    if len(req.new_password) < 12:
+        raise HTTPException(status_code=400, detail="新密码长度不能少于12位")
     admin.password_hash = pwd_context.hash(req.new_password)
+    admin.token_version += 1
     db.commit()
     return {"status": "success", "message": "密码修改成功"}

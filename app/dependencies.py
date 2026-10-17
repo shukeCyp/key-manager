@@ -1,9 +1,13 @@
 """JWT auth dependencies and utility functions."""
 import datetime
+import threading
+import time
+from collections import deque
 from typing import Optional, Dict, List
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError, ExpiredSignatureError
+import jwt
+from jwt import InvalidTokenError as JWTError, ExpiredSignatureError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -13,20 +17,26 @@ from app.models import Admin, Setting
 bearer_scheme = HTTPBearer(auto_error=False)
 
 # ── In-memory rate limiting (simple, per-process) ──
-_rate_store: Dict[str, List[datetime.datetime]] = {}
+_rate_store = {}
+_rate_lock = threading.Lock()
 
 def check_rate_limit(key: str, max_requests: int, window_seconds: int) -> bool:
     """Return True if under limit, False if exceeded."""
-    now = datetime.datetime.now()
-    window = datetime.timedelta(seconds=window_seconds)
-    if key not in _rate_store:
-        _rate_store[key] = []
-    # prune old entries
-    _rate_store[key] = [t for t in _rate_store[key] if now - t < window]
-    if len(_rate_store[key]) >= max_requests:
-        return False
-    _rate_store[key].append(now)
-    return True
+    now = time.monotonic()
+    with _rate_lock:
+        if len(_rate_store) >= 10000:
+            for old_key, entries in list(_rate_store.items()):
+                if not entries or entries[-1] <= now - 3600:
+                    _rate_store.pop(old_key, None)
+            if key not in _rate_store and len(_rate_store) >= 10000:
+                return False
+        entries = _rate_store.setdefault(key, deque())
+        while entries and entries[0] <= now - window_seconds:
+            entries.popleft()
+        if len(entries) >= max_requests:
+            return False
+        entries.append(now)
+        return True
 
 
 def create_token(data: dict, expires_delta: datetime.timedelta) -> str:
@@ -44,17 +54,19 @@ def get_current_admin(
     token = credentials.credentials
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="令牌类型无效")
         admin_id_str = payload.get("sub")
         if admin_id_str is None:
             raise HTTPException(status_code=401, detail="令牌无效")
         admin_id = int(admin_id_str)
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="令牌已过期")
-    except JWTError:
+    except (JWTError, ValueError, TypeError):
         raise HTTPException(status_code=401, detail="令牌无效")
 
     admin = db.query(Admin).filter(Admin.id == admin_id).first()
-    if admin is None:
+    if admin is None or payload.get("ver") != admin.token_version:
         raise HTTPException(status_code=401, detail="令牌无效")
     return admin
 

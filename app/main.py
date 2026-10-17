@@ -1,13 +1,14 @@
 """FastAPI application entry point."""
 import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from passlib.context import CryptContext
+from app.passwords import pwd_context
 
 from app.database import engine, SessionLocal, Base
-from app.models import Admin
+from app.models import Admin, Application
 from app.config import settings as app_settings
 from app.dependencies import get_setting
 
@@ -32,6 +33,9 @@ def get_current_prefix() -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app_settings.validate_production()
+    from app.signing import private_key
+    private_key()
     # Create tables
     Base.metadata.create_all(bind=engine)
 
@@ -53,13 +57,22 @@ async def lifespan(app: FastAPI):
                 conn.execute(text("ALTER TABLE admin ADD COLUMN otp_secret VARCHAR(32)"))
                 conn.commit()
                 print("[MIGRATE] Added otp_secret column to admin table")
+        for table, name, ddl in [
+            ("keys", "duration_days", "INTEGER"),
+            ("admin", "token_version", "INTEGER NOT NULL DEFAULT 0"),
+            ("device_bindings", "client_name", "VARCHAR(64) DEFAULT ''"),
+        ]:
+            names = {column["name"] for column in inspect(conn).get_columns(table)}
+            if name not in names:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_key_machine ON device_bindings (key_id, machine_code)"))
+        conn.commit()
 
     # Seed admin + settings on first run
     db = SessionLocal()
     try:
         existing = db.query(Admin).first()
         if not existing:
-            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
             admin = Admin(
                 username=app_settings.ADMIN_USERNAME,
                 password_hash=pwd_context.hash(app_settings.ADMIN_PASSWORD),
@@ -69,6 +82,10 @@ async def lifespan(app: FastAPI):
             print(f"[INIT] Admin created — user: {app_settings.ADMIN_USERNAME}")
 
         from app.dependencies import set_setting
+        if not db.query(Application).filter_by(app_code=app_settings.SUITE_APP_CODE).first():
+            db.add(Application(name=app_settings.SUITE_APP_NAME, app_code=app_settings.SUITE_APP_CODE,
+                               description="所有系列软件共用此产品编号、卡密和机器码；在任意软件激活后统一计时。"))
+            db.commit()
         # Seed settings if missing
         if not get_setting(db, "api_prefix"):
             set_setting(db, "api_prefix", app_settings.DEFAULT_API_PREFIX)
@@ -92,14 +109,17 @@ app = FastAPI(
     title="卡密管理系统",
     version="2.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if app_settings.ENABLE_API_DOCS else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if app_settings.ENABLE_API_DOCS else None,
 )
 
-templates = Jinja2Templates(directory="app/templates")
+APP_DIR = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 app.state.templates = templates
 
 # Serve static files
-os.makedirs("app/static", exist_ok=True)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 
 
 # ── Dynamic prefix middleware ─────────────────────
@@ -142,9 +162,9 @@ async def dynamic_prefix_middleware(request: Request, call_next):
 # ── Client auth API (FIXED path: ALWAYS /api/client/auth) ─
 # Use a sub-app so we can set custom exception handlers
 
-client_app = FastAPI()
+client_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-from app.routers.client import router as client_router
+from app.routers.client_v2 import router as client_router
 client_app.include_router(client_router)
 
 
@@ -180,9 +200,29 @@ app.include_router(settings_router.router, prefix="/__admin")
 # Recycle bin
 from app.routers.recycle import router as recycle_router
 app.include_router(recycle_router, prefix="/__admin")
+from app.routers.integration import router as integration_router
+app.include_router(integration_router, prefix="/__admin")
 
 
 # ── Web page routes ───────────────────────────────
 
 from app.routers.pages import router as pages_router
 app.include_router(pages_router)
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    from sqlalchemy import text
+    with SessionLocal() as session:
+        session.execute(text("SELECT 1"))
+    return {"status": "ok", "version": "3.0.0"}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Cache-Control"] = "no-store"
+    return response

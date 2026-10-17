@@ -1,0 +1,6 @@
+[Unit]
+Description=Back up Shaohua licenses and signing key
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/shaohua-license/current/deploy/backup.py
+UMask=0077

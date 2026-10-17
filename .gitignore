@@ -4,3 +4,10 @@ data/
 .claude/
 .agents/
 *.gz
+*.pem
+.venv/
+.pytest_cache/
+dist/
+backups/
+*.sqlite*
+*.db*

@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}卡密管理系统{% endblock %}</title>
+    <title>{% block title %}韶华授权中心{% endblock %}</title>
     <link rel="stylesheet" href="/static/tailwind.min.css">
     <script>
         // ── Auth helper ──────────────────────────
         const AUTH = {
-            getToken() { return localStorage.getItem('access_token'); },
-            getRefresh() { return localStorage.getItem('refresh_token'); },
+            getToken() { return sessionStorage.getItem('access_token'); },
+            getRefresh() { return sessionStorage.getItem('refresh_token'); },
             setTokens(access, refresh) {
-                localStorage.setItem('access_token', access);
-                if (refresh) localStorage.setItem('refresh_token', refresh);
+                sessionStorage.setItem('access_token', access);
+                if (refresh) sessionStorage.setItem('refresh_token', refresh);
             },
             clear() {
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('refresh_token');
+                sessionStorage.removeItem('access_token');
+                sessionStorage.removeItem('refresh_token');
             },
             loggedIn() { return !!this.getToken(); },
             async fetch(url, options = {}) {
@@ -130,9 +130,10 @@
     <div class="flex h-screen">
         <aside class="w-56 bg-gray-900 text-white flex flex-col shrink-0">
             <div class="px-5 py-4 text-lg font-bold border-b border-gray-700">
-                🔑 卡密管理系统
+                🔑 韶华授权中心
             </div>
             <nav class="flex-1 px-3 py-4 space-y-1">
+                <a href="/integration" class="block px-3 py-2 rounded text-sm hover:bg-gray-800">Python 软件接入</a>
                 <a href="/" class="block px-3 py-2 rounded text-sm hover:bg-gray-800
                    {% if request.url.path == '/' %}bg-gray-800 font-medium{% endif %}">
                     📊 仪表盘

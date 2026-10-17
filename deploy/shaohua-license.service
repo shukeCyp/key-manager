@@ -1,0 +1,28 @@
+[Unit]
+Description=Shaohua suite licensing server
+After=network.target
+
+[Service]
+Type=simple
+User=shaohua-license
+Group=shaohua-license
+WorkingDirectory=/opt/shaohua-license/current
+EnvironmentFile=/etc/shaohua-license.env
+Environment=TZ=Asia/Shanghai
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/shaohua-license/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8810 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1 --limit-concurrency 100 --timeout-keep-alive 5
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/shaohua-license
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=512M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

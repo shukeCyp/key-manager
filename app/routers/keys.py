@@ -2,7 +2,7 @@
 import csv
 import datetime
 import io
-import random
+import secrets
 import string
 import uuid
 from typing import Optional
@@ -15,7 +15,7 @@ from app.database import get_db
 from app.models import Application, Key, DeviceBinding
 from app.schemas import (
     KeyGenerateRequest, KeyUpdateRequest, KeyResponse, KeyDetailResponse,
-    DeviceInfo, BatchDeleteRequest,
+    DeviceInfo, BatchDeleteRequest, KeyExtendRequest,
 )
 from app.dependencies import get_current_admin, get_heartbeat_threshold
 from app.routers.recycle import soft_delete_keys
@@ -63,7 +63,7 @@ def _key_to_response(key: Key, db: Session, threshold_minutes: int) -> KeyRespon
 def _generate_key_code(length: int = 20) -> str:
     """Generate a random key code."""
     chars = string.ascii_uppercase + string.digits
-    return "".join(random.choice(chars) for _ in range(length))
+    return "".join(secrets.choice(chars) for _ in range(length))
 
 
 # ── API ──────────────────────────────────────────
@@ -139,6 +139,12 @@ async def list_keys(
         except ValueError:
             pass
 
+    if online is not None:
+        recent = db.query(DeviceBinding.id).filter(
+            DeviceBinding.key_id == Key.id,
+            DeviceBinding.last_heartbeat >= datetime.datetime.now() - datetime.timedelta(minutes=threshold),
+        ).exists()
+        q = q.filter(recent if online else ~recent)
     total = q.count()
     keys = (
         q.order_by(Key.created_at.desc())
@@ -148,11 +154,6 @@ async def list_keys(
     )
 
     items = [_key_to_response(k, db, threshold) for k in keys]
-
-    # Filter by online status (post-query, since it's computed)
-    if online is not None:
-        items = [item for item in items if item.online == online]
-        total = len(items)
 
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
@@ -211,8 +212,8 @@ async def generate_keys(
 
         expire_time = None
         now = datetime.datetime.now()
-        if data.expire_days:
-            expire_time = now + datetime.timedelta(days=data.expire_days)
+        from app.licensing import DEFAULT_DAYS
+        duration_days = None if data.key_type == "permanent" else (data.expire_days or DEFAULT_DAYS.get(data.key_type))
 
         k = Key(
             key_code=key_code,
@@ -221,6 +222,7 @@ async def generate_keys(
             key_type=data.key_type,
             device_limit=data.device_limit,
             expire_time=expire_time,
+            duration_days=duration_days,
         )
         db.add(k)
         keys.append(k)
@@ -248,6 +250,12 @@ async def update_key(
 
     if data.key_type is not None:
         key.key_type = data.key_type
+        if key.start_time is None:
+            from app.licensing import DEFAULT_DAYS
+            if data.key_type == "custom" and not key.duration_days:
+                raise HTTPException(status_code=400, detail="请重新生成带有效天数的自定义卡")
+            if data.key_type != "custom":
+                key.duration_days = DEFAULT_DAYS.get(data.key_type)
     if data.device_limit is not None:
         key.device_limit = data.device_limit
     if data.status is not None:
@@ -277,6 +285,26 @@ async def delete_key(
         raise HTTPException(status_code=404, detail="卡密不存在")
     batch_id = soft_delete_keys(db, [key_id])
     return {"status": "success", "message": "已移入回收站", "batch_id": batch_id}
+
+
+@router.post("/{key_id}/extend", response_model=None)
+def extend_key(key_id: int, data: KeyExtendRequest, db: Session = Depends(get_db), _=Depends(get_current_admin)):
+    from app.licensing import beijing_now, DEFAULT_DAYS
+    if db.bind.dialect.name == "sqlite":
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+    key = db.query(Key).filter_by(id=key_id).with_for_update().first()
+    if not key:
+        raise HTTPException(status_code=404, detail="卡密不存在")
+    if key.key_type == "permanent":
+        raise HTTPException(status_code=400, detail="永久卡无需续期")
+    if key.start_time is None:
+        key.duration_days = (key.duration_days or DEFAULT_DAYS.get(key.key_type, 0)) + data.days
+    else:
+        key.expire_time = max(key.expire_time or beijing_now(), beijing_now()) + datetime.timedelta(days=data.days)
+        if key.status == "expired":
+            key.status = "used"
+    db.commit()
+    return {"status": "success", "message": f"已增加 {data.days} 天有效期"}
 
 
 @router.post("/batch-delete", response_model=None)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import datetime
-from typing import Optional, List
-from pydantic import BaseModel
+from typing import Optional, List, Literal
+from pydantic import BaseModel, Field, model_validator
 
 
 # ── Auth ──────────────────────────────────────────
@@ -57,17 +57,23 @@ class ApplicationResponse(BaseModel):
 
 class KeyGenerateRequest(BaseModel):
     app_id: int
-    key_type: str = "month"
-    count: int = 1
-    device_limit: int = 1
-    expire_days: Optional[int] = None
-    prefix: str = ""
-    suffix: str = ""
+    key_type: Literal["day", "week", "month", "quarter", "year", "permanent", "custom"] = "month"
+    count: int = Field(default=1, ge=1, le=1000)
+    device_limit: int = Field(default=1, ge=1, le=100)
+    expire_days: Optional[int] = Field(default=None, ge=1, le=36500)
+    prefix: str = Field(default="", max_length=20, pattern=r"^[A-Za-z0-9_-]*$")
+    suffix: str = Field(default="", max_length=20, pattern=r"^[A-Za-z0-9_-]*$")
+
+    @model_validator(mode="after")
+    def custom_duration_required(self):
+        if self.key_type == "custom" and self.expire_days is None:
+            raise ValueError("自定义卡必须填写有效天数")
+        return self
 
 
 class KeyUpdateRequest(BaseModel):
-    key_type: Optional[str] = None
-    device_limit: Optional[int] = None
+    key_type: Optional[Literal["day", "week", "month", "quarter", "year", "permanent", "custom"]] = None
+    device_limit: Optional[int] = Field(default=None, ge=1, le=100)
     status: Optional[str] = None
     expire_time: Optional[str] = None  # ISO format string
 
@@ -125,6 +131,10 @@ class BatchDeleteRequest(BaseModel):
     ids: List[int]
 
 
+class KeyExtendRequest(BaseModel):
+    days: int = Field(ge=1, le=36500)
+
+
 # ── Dashboard ─────────────────────────────────────
 
 class DashboardStats(BaseModel):
@@ -140,10 +150,15 @@ class DashboardStats(BaseModel):
 # ── Client Auth ───────────────────────────────────
 
 class ClientAuthRequest(BaseModel):
-    machine_code: str
-    key_code: str
-    app_code: str
+    machine_code: str = Field(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    key_code: str = Field(min_length=1, max_length=64)
+    app_code: str = Field(min_length=1, max_length=32)
     ip_address: Optional[str] = None
+
+
+class SignedVerifyRequest(ClientAuthRequest):
+    nonce: str = Field(min_length=24, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    client_name: str = Field(default="", max_length=64)
 
 
 class ClientAuthSuccess(BaseModel):

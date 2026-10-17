@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Python 接入 — 韶华授权中心{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Python 软件接入</h1>
+<div class="bg-white rounded-lg shadow p-6 mb-4">
+    <p class="mb-4">系列软件共用一个产品编号、一套卡密和同一机器码。用户在任意软件首次激活后统一计时，同一电脑运行多个软件只占一个设备名额。</p>
+    <p class="mb-2">产品编号：<code id="suite-code"></code></p>
+    <p class="mb-2">验证接口：<code id="verify-url"></code></p>
+    <p class="mb-2">签名公钥（放入客户端）：</p>
+    <textarea id="public-key" readonly rows="2" class="w-full border rounded-lg px-3 py-2 font-mono text-sm"></textarea>
+    <p class="text-sm text-gray-500 mt-2">公钥可随软件分发。服务器签名私钥和后台登录凭据仅保留在服务器。</p>
+</div>
+<div class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-lg font-bold mb-4">接入示例</h2>
+    <p class="text-sm mb-2">将交付包中的 shaohua_license.py 放入项目，安装 requests、cryptography。</p>
+    <pre id="example" class="bg-gray-100 p-4 rounded-lg text-sm" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+    <p class="text-sm text-gray-500 mt-4">后台心跳每 60 秒重新验证。禁用和到期会阻止后续验证；断网时最多保留当前短期授权，有效期可在示例中通过 require_valid() 检查。GUI 程序请在工作线程运行网络请求。</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(async () => {
+    if (!requireAuth()) return;
+    await loadApiPrefix();
+    try {
+        const info = await AUTH.get(apiUrl('/integration'));
+        document.getElementById('suite-code').textContent = info.app_code;
+        document.getElementById('verify-url').textContent = location.origin + info.endpoint;
+        document.getElementById('public-key').value = info.public_key;
+        document.getElementById('example').textContent = `from shaohua_license import LicenseClient, LicenseError
+
+client = LicenseClient(
+    server_url=${JSON.stringify(location.origin)},
+    app_code=${JSON.stringify(info.app_code)},
+    public_key=${JSON.stringify(info.public_key)},
+    client_name="你的软件名称",  # 各软件仅修改此处
+)
+try:
+    info = client.verify(input("请输入卡密：").strip())
+    client.start_heartbeat()
+    print("授权到期：", info["expire_time"] or "永久")
+    client.require_valid()  # 每次执行受保护的业务操作前调用
+    # 执行你的业务逻辑
+finally:
+    client.close()`;
+    } catch (e) { showToast(e.message, 'error'); }
+})();
+</script>
+{% endblock %}
