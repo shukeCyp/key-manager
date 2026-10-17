@@ -39,6 +39,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 - 配置 `/etc/shaohua-license.env`（root 可读），数据与签名私钥 `/var/lib/shaohua-license/`。
 - 服务 `shaohua-license.service`，仅监听 `127.0.0.1:8810`，由域名 Nginx 转发。
 - `GET /healthz` 提供健康检查；正式 API 为 `POST /api/client/verify`。
+- `shaohua-license-cert-renew.timer` 每日两次检查证书续期；续期后自动检查并重载现有 Nginx。
 - 每日北京时间 02:35 左右备份数据库、配置与签名私钥到 `/var/backups/shaohua-license/`，保留 14 天。备份仍在同一服务器，建议另行复制至你控制的存储。
 
 常用命令：

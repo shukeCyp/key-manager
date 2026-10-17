@@ -1,0 +1,6 @@
+[Unit]
+Description=Renew TLS certificate for Shaohua licensing
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/certbot/bin/certbot renew --cert-name tk.shaohua.fun --quiet

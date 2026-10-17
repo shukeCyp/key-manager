@@ -1,0 +1,8 @@
+[Unit]
+Description=Check Shaohua TLS certificate renewal twice daily
+[Timer]
+OnCalendar=*-*-* 03,15:15:00 Asia/Shanghai
+RandomizedDelaySec=3600
+Persistent=true
+[Install]
+WantedBy=timers.target
