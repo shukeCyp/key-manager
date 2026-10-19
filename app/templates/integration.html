@@ -12,9 +12,26 @@
 </div>
 <div class="bg-white rounded-lg shadow p-6">
     <h2 class="text-lg font-bold mb-4">接入示例</h2>
-    <p class="text-sm mb-2">将交付包中的 shaohua_license.py 放入项目，安装 requests、cryptography。</p>
+    <p class="text-sm mb-2">将交付包中的 tk_license.py 放入项目，安装 requests、cryptography。</p>
     <pre id="example" class="bg-gray-100 p-4 rounded-lg text-sm" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
     <p class="text-sm text-gray-500 mt-4">后台心跳每 60 秒重新验证。禁用和到期会阻止后续验证；断网时最多保留当前短期授权，有效期可在示例中通过 require_valid() 检查。GUI 程序请在工作线程运行网络请求。</p>
+</div>
+<div class="bg-white rounded-lg shadow p-6 mt-4">
+ <h2 class="text-lg font-bold mb-4">问题反馈接入</h2>
+ <p class="mb-2">接口：<code>/api/client/feedback</code>，POST multipart/form-data。验证成功的签名响应中包含短期 feedback_token，使用 Authorization: Bearer 发送；该令牌只能提交反馈，不能操作后台。</p>
+ <p class="mb-2">metadata 字段是 JSON，包含 submission_id（UUID）、app_version、description、contact（可选）；logs 是可选 ZIP 文件，最大 15 MB，仅支持日志和 JSON、TXT 文本。版本号支持精确筛选；超时重试应复用提交编号和同一个 ZIP。</p>
+ <pre class="bg-gray-100 p-4 rounded-lg text-sm" style="white-space:pre-wrap"># client.verify(card) 成功后，由 SDK 自动携带反馈令牌
+import uuid
+submission_id = str(uuid.uuid4())  # 重试时保留此编号
+receipt = client.submit_feedback(
+    app_version="0.1.2",
+    description="点击导出后程序提示失败，重新打开项目后仍可复现。",
+    logs_path="logs.zip",  # 可不传，仅提交文字
+    contact="可选联系方式",
+    submission_id=submission_id,
+)
+print("反馈编号：", receipt["id"])</pre>
+ <p class="text-sm text-gray-500 mt-4">先向用户说明日志内容并由用户主动提交；请脱敏卡密、API Key 和其他凭据，勿上传素材或设置数据库。后台从“问题反馈”查看、下载和记录处理结果。</p>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -27,7 +44,7 @@
         document.getElementById('suite-code').textContent = info.app_code;
         document.getElementById('verify-url').textContent = location.origin + info.endpoint;
         document.getElementById('public-key').value = info.public_key;
-        document.getElementById('example').textContent = `from shaohua_license import LicenseClient, LicenseError
+        document.getElementById('example').textContent = `from tk_license import LicenseClient, LicenseError
 
 client = LicenseClient(
     server_url=${JSON.stringify(location.origin)},

@@ -38,3 +38,5 @@ finally:
 自定义天数从第一次成功激活开始计时，升级客户端不会重置到期时间。禁用卡密会阻止 TK剪辑器授权验证；后台续期不会自动解除禁用状态。
 
 不向客户端分发签名私钥、后台密码或 JWT 密钥。完全运行在本地的 Python 代码仍可被修改；高价值的服务端接口也需要独立验证授权。
+
+问题反馈使用 `client.submit_feedback(app_version, description, logs_path=None, contact='', submission_id=None)`，详情见 [反馈接入说明](反馈接入说明.md)。验证响应新增的 `feedback_token` 由 SDK 自动使用；它只能提交反馈，不能登录后台。重试时复用原提交编号及 ZIP。

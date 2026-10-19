@@ -62,3 +62,8 @@ async def logout():
 @router.get("/integration", response_class=HTMLResponse)
 async def integration_page(request: Request):
     return request.app.state.templates.TemplateResponse(request=request, name='integration.html', context={"request": request})
+
+
+@router.get('/feedback',response_class=HTMLResponse)
+async def feedback_page(request:Request):
+    return request.app.state.templates.TemplateResponse(request=request,name='feedback.html',context={'request':request})

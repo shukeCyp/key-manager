@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}问题反馈 — TK剪辑器授权管理{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">问题反馈</h1>
+<div class="bg-white rounded-lg shadow p-4 mb-4 flex gap-4 items-center flex-wrap">
+ <label>处理状态 <select id="feedback-status" class="border rounded px-3 py-2"><option value="">全部</option><option value="new">待处理</option><option value="processing">处理中</option><option value="resolved">已解决</option><option value="closed">已关闭</option></select></label>
+ <label>版本号 <input id="feedback-version" maxlength="64" class="border rounded px-3 py-2" placeholder="例如 0.1.2"></label>
+ <button id="feedback-filter" class="bg-blue-600 text-white px-4 py-2 rounded">筛选</button>
+ <span id="feedback-count" class="text-gray-500"></span>
+</div>
+<p id="feedback-error" role="alert" class="text-red-600 mb-4"></p>
+<div id="feedback-list"></div>
+<div class="flex gap-4 items-center mt-4"><button id="feedback-prev" class="border px-4 py-2 rounded">上一页</button><span id="feedback-page"></span><button id="feedback-next" class="border px-4 py-2 rounded">下一页</button></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const feedbackNames={new:'待处理',processing:'处理中',resolved:'已解决',closed:'已关闭'};
+let feedbackPage=1;
+function element(tag,text,className=''){const node=document.createElement(tag);node.textContent=text;node.className=className;return node;}
+async function loadFeedback(){
+ const error=document.getElementById('feedback-error');error.textContent='';
+ try{
+  const query=new URLSearchParams({page:String(feedbackPage),status:document.getElementById('feedback-status').value,version:document.getElementById('feedback-version').value.trim()});
+  const data=await AUTH.get(apiUrl('/feedback')+'?'+query),list=document.getElementById('feedback-list');list.replaceChildren();
+  document.getElementById('feedback-count').textContent='共 '+data.total+' 条';document.getElementById('feedback-page').textContent='第 '+feedbackPage+' 页';
+  document.getElementById('feedback-prev').disabled=feedbackPage<=1;document.getElementById('feedback-next').disabled=feedbackPage*30>=data.total;
+  for(const row of data.items){
+   const card=element('section','','bg-white rounded-lg shadow p-6 mb-4');
+   card.append(element('h2',row.app_version+' · '+row.client_name+' · '+feedbackNames[row.status],'text-lg font-bold mb-2'),element('p','编号 '+row.id+' · '+row.created_at,'text-sm text-gray-500 mb-2'));
+   const description=element('p',row.description,'mb-4');description.style.whiteSpace='pre-wrap';card.append(description);
+   if(row.contact)card.append(element('p','联系方式：'+row.contact,'mb-2'));
+   if(row.has_archive){const download=element('button','下载日志 ZIP（'+(row.archive_bytes/1024/1024).toFixed(2)+' MB）','text-blue-600 mb-4');download.onclick=async()=>{download.disabled=true;try{const response=await AUTH.fetch(apiUrl('/feedback/'+row.id+'/logs'));if(!response.ok)throw Error('下载失败');const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download='feedback-'+row.id+'.zip';link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}catch(e){error.textContent=e.message}finally{download.disabled=false}};card.append(download);}
+   const select=element('select','','border rounded px-3 py-2 mr-4');for(const [value,label] of Object.entries(feedbackNames)){const option=element('option',label);option.value=value;select.append(option)}select.value=row.status;
+   const note=element('textarea','','w-full border rounded px-3 py-2 mb-2');note.placeholder='内部处理备注';note.value=row.admin_note;note.maxLength=5000;
+   const save=element('button','保存处理结果','bg-blue-600 text-white px-4 py-2 rounded');save.onclick=async()=>{save.disabled=true;try{const response=await AUTH.fetch(apiUrl('/feedback/'+row.id),{method:'PATCH',body:JSON.stringify({status:select.value,admin_note:note.value})});const result=await response.json();if(!response.ok)throw Error(result.detail||'保存失败');await loadFeedback()}catch(e){error.textContent=e.message}finally{save.disabled=false}};
+   card.append(note,select,save);list.append(card);
+  }
+  if(!data.items.length)list.append(element('p','暂无反馈','text-gray-500 p-6'));
+ }catch(e){error.textContent=e.message}
+}
+document.getElementById('feedback-filter').onclick=()=>{feedbackPage=1;loadFeedback()};document.getElementById('feedback-prev').onclick=()=>{feedbackPage--;loadFeedback()};document.getElementById('feedback-next').onclick=()=>{feedbackPage++;loadFeedback()};
+(async()=>{if(!requireAuth())return;await loadApiPrefix();await loadFeedback()})();
+</script>
+{% endblock %}

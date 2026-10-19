@@ -89,3 +89,25 @@ class KeyRecycleBin(Base):
     key_data = Column(Text, nullable=False)          # JSON: key fields
     devices_data = Column(Text, default="[]")         # JSON: device binding fields
     deleted_at = Column(DateTime, default=now)
+
+
+class Feedback(Base):
+    __tablename__ = "feedback"
+    id = Column(String(32), primary_key=True)
+    submission_id = Column(String(36), nullable=False)
+    app_id = Column(Integer, nullable=False, index=True)
+    key_id = Column(Integer, nullable=False)
+    machine_code = Column(String(64), nullable=False)
+    client_name = Column(String(64), nullable=False, default="")
+    app_version = Column(String(64), nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    contact = Column(String(200), nullable=False, default="")
+    content_hash = Column(String(64), nullable=False)
+    archive_name = Column(String(64), nullable=True)
+    archive_bytes = Column(Integer, nullable=False, default=0)
+    archive_sha256 = Column(String(64), nullable=True)
+    status = Column(String(16), nullable=False, default="new", index=True)
+    admin_note = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, nullable=False, default=now, index=True)
+    updated_at = Column(DateTime, nullable=False, default=now, onupdate=now)
+    __table_args__ = (UniqueConstraint("key_id", "machine_code", "submission_id", name="uq_feedback_submission"),)

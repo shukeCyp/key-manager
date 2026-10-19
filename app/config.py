@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     CLIENT_DEVICE_REQUESTS_PER_MINUTE: int = 120
     SUITE_APP_CODE: str = "TK_EDITOR"
     SUITE_APP_NAME: str = "TK剪辑器"
+    FEEDBACK_STORAGE_DIR: str = "data/feedback"
+    FEEDBACK_MAX_ARCHIVE_BYTES: int = 15 * 1024 * 1024
+    FEEDBACK_TOTAL_STORAGE_BYTES: int = 2 * 1024 * 1024 * 1024
 
     def validate_production(self):
         if self.ENVIRONMENT != "production":

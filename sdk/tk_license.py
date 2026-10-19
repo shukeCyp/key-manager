@@ -20,6 +20,10 @@ class LicenseError(RuntimeError):
     pass
 
 
+class FeedbackError(RuntimeError):
+    pass
+
+
 def machine_code():
     """Same machine identity across all programs and virtual environments."""
     identity = None
@@ -140,6 +144,49 @@ class LicenseClient:
         """Call at protected operations; raises on rejection or expired cached lease."""
         if time.monotonic() >= self._valid_until:
             raise LicenseError("授权已失效，请重新联网验证")
+
+    def submit_feedback(self, app_version, description, logs_path=None, contact='', submission_id=None):
+        """Submit diagnostics with a license-scoped token; never send admin secrets.
+
+        Reuse submission_id and the same archive when retrying an uncertain result.
+        Network failures do not revoke the application's existing license lease.
+        """
+        if not isinstance(description,str) or not 5<=len(description.strip())<=10000:
+            raise FeedbackError('问题描述请填写 5–10000 个字符')
+        if not isinstance(app_version,str) or not 1<=len(app_version.strip())<=64:
+            raise FeedbackError('软件版本号无效')
+        if not isinstance(contact,str) or len(contact)>200:raise FeedbackError('联系方式过长')
+        try:ident=str(uuid.UUID(submission_id)) if submission_id else str(uuid.uuid4())
+        except (ValueError,TypeError,AttributeError):raise FeedbackError('反馈提交编号无效')
+        self.require_valid()
+        if not (self._last_result or {}).get('feedback_token'):
+            self.verify()
+        with self._verify_lock:
+            self.require_valid()
+            token=(self._last_result or {}).get('feedback_token')
+            if not token:raise FeedbackError('授权服务器尚未启用反馈接口')
+            metadata=json.dumps(dict(submission_id=ident,app_version=app_version.strip(),description=description.strip(),contact=contact.strip()),ensure_ascii=False)
+            stream=None
+            try:
+                files={'metadata':(None,metadata)}
+                if logs_path is not None:
+                    path=Path(logs_path)
+                    if not path.is_file() or not 1<=path.stat().st_size<=15*1024*1024:
+                        raise FeedbackError('日志 ZIP 不能超过 15 MB')
+                    stream=path.open('rb');files['logs']=('logs.zip',stream,'application/zip')
+                response=self._session.post(self.server_url+'/api/client/feedback',
+                    headers={'Authorization':'Bearer '+token},files=files,timeout=(5,60))
+                try:result=response.json()
+                except ValueError:raise FeedbackError('反馈服务响应无效，请保留提交编号后重试')
+                if response.status_code not in (200,201):
+                    message=result.get('detail') or result.get('message') or '反馈提交失败'
+                    raise FeedbackError(message if isinstance(message,str) else '反馈内容格式无效')
+                if not isinstance(result.get('id'),str):raise FeedbackError('反馈服务响应无效')
+                return result
+            except requests.RequestException as exc:
+                raise FeedbackError('无法提交反馈，请检查网络后重试（请保留原提交编号）') from exc
+            finally:
+                if stream:stream.close()
 
     def start_heartbeat(self, interval=60, on_error=None):
         """Revalidates the license, rather than merely reporting an event."""

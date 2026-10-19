@@ -59,3 +59,7 @@ systemctl list-timers shaohua-license-backup.timer
 同一机器重复运行客户端共用设备名额；离线不自动释放设备。服务端拒绝会在下一次成功联网复验时生效；断网最多保留当前短期租期。客户端本地代码和机器码均可被修改，签名协议不能保证软件无法破解。
 
 保留上游 MIT [LICENSE](LICENSE)。
+
+## 问题反馈
+
+后台“问题反馈”支持版本筛选、问题描述、日志 ZIP 下载、处理状态和内部备注。新版 SDK 可在授权成功后使用 `client.submit_feedback(...)` 提交，接口为 `/api/client/feedback`；客户只使用短期反馈令牌。完整 Python、HTTP 和后台管理接入示例见 [反馈接入说明](反馈接入说明.md)。

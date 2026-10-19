@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="卡密管理系统",
-    version="3.0.0",
+    version="3.1.0",
     lifespan=lifespan,
     docs_url="/docs" if app_settings.ENABLE_API_DOCS else None,
     redoc_url=None,
@@ -166,6 +166,8 @@ client_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 from app.routers.client_v2 import router as client_router
 client_app.include_router(client_router)
+from app.routers.feedback import client_router as feedback_client_router, admin_router as feedback_admin_router
+client_app.include_router(feedback_client_router)
 
 
 @client_app.exception_handler(Exception)
@@ -202,6 +204,7 @@ from app.routers.recycle import router as recycle_router
 app.include_router(recycle_router, prefix="/__admin")
 from app.routers.integration import router as integration_router
 app.include_router(integration_router, prefix="/__admin")
+app.include_router(feedback_admin_router, prefix="/__admin")
 
 
 # ── Web page routes ───────────────────────────────
@@ -215,7 +218,7 @@ def healthz():
     from sqlalchemy import text
     with SessionLocal() as session:
         session.execute(text("SELECT 1"))
-    return {"status": "ok", "version": "3.0.0"}
+    return {"status": "ok", "version": "3.1.0"}
 
 
 @app.middleware("http")
