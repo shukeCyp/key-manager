@@ -14,10 +14,13 @@ from tools.plan_shared_subtitles import infer
 def main():
     p=argparse.ArgumentParser();p.add_argument('--library',required=True,type=Path);p.add_argument('--output',required=True,type=Path)
     p.add_argument('--root-id',help='Export one independent NAS root; separate roots can run concurrently')
+    p.add_argument('--resume',action='store_true',help='Resume finalized chunks from the same immutable publication')
+    p.add_argument('--shard-copy',type=Path,help='Read a verified local copy of the selected root shard')
     p.add_argument('--chunk-files',type=int,default=500);a=p.parse_args()
     if not 10<=a.chunk_files<=2000:p.error('chunk-files must be 10–2000')
     root=a.library.resolve();a.output.mkdir(parents=True,exist_ok=True)
-    if (a.output/'manifest.json').exists():raise SystemExit('Output manifest already exists; use a new output directory')
+    if (a.output/'manifest.json').exists() and not a.resume:raise SystemExit('Output manifest already exists; use --resume or a new output directory')
+    if a.shard_copy and not a.root_id:p.error('--shard-copy requires --root-id')
     pointer=json.loads((root/'current.json').read_text('utf8'));folder=(root/'catalog/versions'/pointer['version']).resolve()
     if not folder.is_relative_to(root/'catalog/versions'):raise ValueError('Invalid publication')
     raw=(folder/'manifest.json').read_bytes()
@@ -32,6 +35,25 @@ def main():
         files={k:v for k,v in files.items() if v['root_id']==a.root_id}
     manifest=dict(library_id=publication['libraryId'],revision=publication['version'],status='running',chunks=[],files=0,cues=0,review=0,expected_files=len(files))
     counts=Counter();chunk=None;chunk_path=None;chunk_count=0;processed=set();begin=time.monotonic()
+    last_cue_file=None
+    if a.resume and (a.output/'manifest.json').exists():
+        previous=json.loads((a.output/'manifest.json').read_text('utf8'))
+        if (previous['library_id'],previous['revision'],previous['expected_files'])!=(manifest['library_id'],manifest['revision'],len(files)):raise ValueError('Resume publication or scope changed')
+        if previous['status']=='complete':print('Already exported:',previous['files']);return
+        for part in previous['chunks']:
+            path=(a.output/part['path']).resolve()
+            if not path.is_relative_to(a.output.resolve()):raise ValueError('Invalid checkpoint path')
+            if hashlib.sha256(path.read_bytes()).hexdigest()!=part['sha256']:raise ValueError('Checkpoint checksum failed')
+            part_count=0
+            with gzip.open(path,'rt',encoding='utf8') as stream:
+                for line in stream:
+                    value=json.loads(line);ident=value['source_id']
+                    if ident in processed:raise ValueError('Duplicate checkpoint source')
+                    processed.add(ident);part_count+=1;manifest['files']+=1;manifest['cues']+=len(value.get('cues',[]));manifest['review']+=int('review_reason'in value);counts[value.get('language','und')]+=1
+                    if value.get('cues'):last_cue_file=ident
+            if part_count!=part['files']:raise ValueError('Checkpoint file count failed')
+            manifest['chunks'].append(part)
+        print('Resuming finalized source files:',len(processed),flush=True)
 
     def save():
         temp=a.output/'manifest.json.tmp';temp.write_text(json.dumps({**manifest,'languages':dict(counts)},ensure_ascii=False,indent=2),'utf8');temp.replace(a.output/'manifest.json')
@@ -71,6 +93,12 @@ def main():
             if a.root_id and root_id!=a.root_id:continue
             path=(root/shard['path']).resolve()
             if not path.is_relative_to(root):raise ValueError('Invalid shard path')
+            if a.shard_copy:
+                if a.shard_copy.stat().st_size!=path.stat().st_size:raise ValueError('Local shard size differs from immutable source')
+                path=a.shard_copy.resolve()
+                with path.open('rb') as stream:copied_hash=hashlib.file_digest(stream,'sha256').hexdigest()
+                if copied_hash!=shard['identity']['sha256']:raise ValueError('Local shard checksum differs from published source')
+                print('Verified local shard against publication SHA-256',flush=True)
             with ro(path) as db:
                 db.execute('PRAGMA cache_size=-32768')
                 metadata={}
@@ -85,15 +113,18 @@ def main():
                               source_digest=row['digest'] or '0'*64,**media)
                     if row['error']:meta['review_reason']='existing_index_error: '+row['error'][:200]
                     metadata[row['id']]=meta
+                if all(ident in processed for ident in metadata):continue
+                start_after=db.execute('SELECT MAX(id) FROM cues WHERE file_id=?',(last_cue_file,)).fetchone()[0] if last_cue_file in metadata else None
                 current=None;cues=[]
-                for row in db.execute('SELECT file_id,ordinal,start,end,original FROM cues ORDER BY id'):
+                query='SELECT file_id,ordinal,start,end,original FROM cues'+(' WHERE id>?' if start_after is not None else '')+' ORDER BY id'
+                for row in db.execute(query,(start_after,) if start_after is not None else ()):
                     ident=row['file_id']
                     if ident!=current:
-                        if current in metadata:emit(record(metadata[current],cues))
+                        if current in metadata and current not in processed:emit(record(metadata[current],cues))
                         current=ident;cues=[]
-                    if ident in metadata:
+                    if ident in metadata and ident not in processed:
                         cues.append(dict(start_ms=round(row['start']*1000),end_ms=round(row['end']*1000),text=row['original']))
-                if current in metadata:emit(record(metadata[current],cues))
+                if current in metadata and current not in processed:emit(record(metadata[current],cues))
                 for ident,meta in metadata.items():
                     if ident not in processed:emit(record({**meta,'review_reason':meta.get('review_reason','missing_cues')},[]))
             finish_chunk()

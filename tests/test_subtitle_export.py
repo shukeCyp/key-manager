@@ -39,3 +39,35 @@ def test_sequential_export_preserves_cues_and_archives_unknown(tmp_path,monkeypa
     assert records[1]['review_reason']=='season_without_episode'
     assert records[2]['review_reason']=='invalid_subtitle_record'
     assert records[3]['review_reason']=='missing_published_shard_record'
+    result['status']='interrupted';result['files']+=7
+    (out/'manifest.json').write_text(json.dumps(result))
+    monkeypatch.setattr(sys,'argv',['export','--library',str(root),'--output',str(out),'--resume'])
+    main()
+    resumed=json.loads((out/'manifest.json').read_text())
+    assert resumed['files']==4 and resumed['chunks']==result['chunks'] and resumed['status']=='complete'
+
+
+def test_resume_after_finalized_chunk_keeps_every_cue(tmp_path,monkeypatch):
+    root=tmp_path/'library';folder=root/'catalog/versions/v1';folder.mkdir(parents=True)
+    names=[f'The Rookie/第2季/The.Rookie.S02E{i+1:02}.en.srt' for i in range(12)]
+    with sqlite3.connect(folder/'catalog.sqlite') as db:
+        db.executescript('CREATE TABLE roots(id TEXT,path TEXT); CREATE TABLE subtitle_files(id TEXT,root_id TEXT,relative_path TEXT,seen INTEGER); CREATE TABLE videos(id TEXT,relative_path TEXT,seen INTEGER);')
+        db.execute('INSERT INTO roots VALUES (?,?)',('r1','//nas/media'))
+        db.executemany('INSERT INTO subtitle_files VALUES (?,?,?,1)',[(str(i),'r1',name) for i,name in enumerate(names)])
+    with sqlite3.connect(root/'shard.sqlite') as db:
+        db.executescript('CREATE TABLE files(id TEXT,relative_path TEXT,video_id TEXT,pairing TEXT,digest TEXT,error TEXT,available INTEGER); CREATE TABLE cues(id INTEGER PRIMARY KEY,file_id TEXT,ordinal INTEGER,start REAL,end REAL,original TEXT);')
+        db.executemany('INSERT INTO files VALUES (?,?,NULL,?,?,NULL,1)',[(str(i),name,'unpaired','a'*64) for i,name in enumerate(names)])
+        db.executemany('INSERT INTO cues VALUES (?,?,?,?,?,?)',[(i,str(i//2),i%2,i%2,i%2+1,'Original sentence '+str(i)) for i in range(24)])
+    raw=json.dumps(dict(libraryId='lib',version='v1',subtitles={'r1':{'path':'shard.sqlite'}})).encode();(folder/'manifest.json').write_bytes(raw)
+    (root/'current.json').write_text(json.dumps(dict(version='v1',manifest=dict(sha256=hashlib.sha256(raw).hexdigest()))))
+    out=tmp_path/'out';args=['export','--library',str(root),'--output',str(out),'--chunk-files','10']
+    monkeypatch.setattr(sys,'argv',args);main()
+    manifest=json.loads((out/'manifest.json').read_text());assert manifest['cues']==24
+    manifest['status']='interrupted';manifest['chunks']=manifest['chunks'][:1]
+    (out/'manifest.json').write_text(json.dumps(manifest))
+    monkeypatch.setattr(sys,'argv',args+['--resume']);main()
+    final=json.loads((out/'manifest.json').read_text());records=[]
+    for part in final['chunks']:
+        with gzip.open(out/part['path'],'rt',encoding='utf8') as f:records.extend(json.loads(line) for line in f)
+    assert len({r['source_id'] for r in records})==12 and final['files']==12 and final['cues']==24
+    assert [c['text'] for r in records for c in r['cues']]==['Original sentence '+str(i) for i in range(24)]

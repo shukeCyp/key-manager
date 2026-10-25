@@ -3,7 +3,7 @@ import threading
 from functools import partial
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from pydantic import ValidationError
-from sqlalchemy import select,func
+from sqlalchemy import select,func,case
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -105,7 +105,7 @@ def statistics(db):
                 cache_estimated_bytes=int(db.scalar(select(func.coalesce(func.sum(store.Track.index_bytes),0)))),
                 index_jobs=[dict(language=j.language,status=j.status,done=j.done,total=j.total,message=j.message) for j in db.scalars(select(store.IndexJob).where(store.IndexJob.status!='complete').order_by(store.IndexJob.updated_at).limit(20))],
                 languages=[dict(language=lang,tracks=count) for lang,count in db.execute(select(store.Track.language,func.count()).group_by(store.Track.language))],
-                imports=[dict(id=r.id,status=r.status,processed=r.processed,failed=r.failed,message=r.message) for r in db.scalars(select(store.ImportRun).order_by(store.ImportRun.id.desc()).limit(10))])
+                imports=[dict(id=r.id,status=r.status,processed=r.processed,failed=r.failed,message=r.message) for r in db.scalars(select(store.ImportRun).order_by(case((store.ImportRun.status.in_(['running','interrupted','partial']),0),else_=1),store.ImportRun.id.desc()).limit(10))])
 
 
 @admin_router.get('/status')
