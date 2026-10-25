@@ -188,6 +188,34 @@ class LicenseClient:
             finally:
                 if stream:stream.close()
 
+    def query_subtitles(self, series_id, sentences):
+        """Batch lookup; each sentence has id/text/language and optional narrator.
+
+        Returns evidence and language coverage. `reliable` does not replace visual
+        verification. Translations must use the original sentence id and specify
+        their actual language; the server does not silently translate.
+        When index_ready is false, display index_progress and retry after 5 seconds.
+        This pending state is not a no-match result and must not trigger visual fallback.
+        """
+        self.require_valid()
+        if not (self._last_result or {}).get('subtitle_token'):
+            self.verify()
+        with self._verify_lock:
+            self.require_valid()
+            token=(self._last_result or {}).get('subtitle_token')
+            if not token:raise LicenseError('服务器尚未启用字幕查询')
+            try:
+                response=self._session.post(self.server_url+'/api/client/subtitles/search',
+                    headers={'Authorization':'Bearer '+token},
+                    json={'series_id':series_id,'sentences':sentences},timeout=(5,60))
+                result=response.json()
+            except (requests.RequestException,ValueError) as exc:
+                raise LicenseError('字幕查询失败，请稍后重试') from exc
+            if response.status_code!=200:
+                detail=result.get('detail') or result.get('message')
+                raise LicenseError(detail if isinstance(detail,str) else '字幕查询失败')
+            return result
+
     def start_heartbeat(self, interval=60, on_error=None):
         """Revalidates the license, rather than merely reporting an event."""
         self.require_valid()

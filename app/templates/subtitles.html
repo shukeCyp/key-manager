@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}共享字幕库 — TK剪辑器{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">共享字幕库</h1>
+<p class="text-gray-500 mb-4">按剧集、语言保存字幕。原片和画面索引仍保留在共享素材库。</p>
+<p id="subtitle-error" role="alert" class="text-red-600 mb-4"></p>
+<div id="subtitle-status" class="bg-white rounded-lg shadow p-4 mb-4">正在读取…</div>
+<div id="subtitle-imports" class="bg-white rounded-lg shadow p-4 mb-4"></div>
+<section class="bg-white rounded-lg shadow p-4 mb-4"><button id="show-review" class="border rounded px-3 py-2">查看待检查文件</button><div id="review-files" class="mt-2"></div><button id="review-next" class="border rounded px-3 py-2 mt-2" hidden>下一页</button></section>
+<section class="bg-white rounded-lg shadow p-4 mb-4">
+ <h2 class="text-lg font-bold mb-2">批量对白查询</h2>
+ <div class="flex gap-4 mb-4"><input id="show-query" class="border rounded px-3 py-2" placeholder="剧名或别名" maxlength="255"><button id="find-show" class="border rounded px-3 py-2">查找剧集</button><select id="series" aria-label="选择剧集" class="border rounded px-3 py-2"></select></div>
+ <label>对白语言 <select id="language" class="border rounded px-3 py-2"><option value="en">英语</option><option value="zh">中文</option><option value="de">德语</option><option value="fr">法语</option><option value="ja">日语</option><option value="es">西班牙语</option><option value="pt">葡萄牙语</option><option value="it">意大利语</option><option value="ru">俄语</option></select></label>
+ <textarea id="sentences" aria-label="对白文本" class="w-full border rounded px-3 py-2 mt-4 mb-2" rows="7" maxlength="20000" placeholder="每行一句原片对白，最多 200 句"></textarea>
+ <button id="search-subtitles" class="bg-blue-600 text-white px-4 py-2 rounded">查询候选集数</button>
+ <p class="text-gray-500 mt-4">查询会过滤过短的通用对白。同一语言字幕不足时会显示覆盖缺口，集数最终由画面匹配确认。</p>
+</section>
+<div id="subtitle-results"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const el=id=>document.getElementById(id);
+function node(tag,text,cls=''){const n=document.createElement(tag);n.textContent=text;n.className=cls;return n;}
+async function request(path,body){const r=await AUTH.fetch(apiUrl('/subtitles'+path),body?{method:'POST',body:JSON.stringify(body)}:{});const data=await r.json();if(!r.ok)throw Error(data.detail||'请求失败');return data;}
+async function shows(){const data=await request('/series?q='+encodeURIComponent(el('show-query').value));el('series').replaceChildren();for(const row of data.items){const o=node('option',row.title+(row.year?' ('+row.year+')':''));o.value=row.id;el('series').append(o);}}
+async function guard(fn){el('subtitle-error').textContent='';try{await fn();}catch(e){el('subtitle-error').textContent=e.message;}}
+async function queryReady(body){for(let attempt=0;attempt<120;attempt++){const r=await request('/search',body);if(r.index_ready!==false)return r;const p=r.index_progress||[];el('subtitle-results').textContent='正在准备本剧字幕索引：'+p.map(j=>j.language+' '+j.done+'/'+j.total+' '+j.message).join('；');if(p.some(j=>j.status==='failed'))throw Error('索引准备失败，请查看任务信息后重试');await new Promise(resolve=>setTimeout(resolve,5000));}throw Error('索引仍在后台准备，稍后再次查询即可');}
+el('find-show').onclick=()=>guard(shows);
+let reviewPage=1;
+async function reviews(){const r=await request('/review?page='+reviewPage);const out=el('review-files');out.replaceChildren(node('p','第 '+reviewPage+' 页'));for(const row of r.items)out.append(node('p',row.path+' · '+row.reason,'mb-2'));if(!r.items.length)out.append(node('p','没有待检查文件'));el('review-next').hidden=r.items.length<30;}
+el('show-review').onclick=()=>guard(async()=>{reviewPage=1;await reviews();});
+el('review-next').onclick=()=>guard(async()=>{reviewPage++;await reviews();});
+async function refreshStatus(){const s=await request('/status');el('subtitle-status').textContent=s.enabled?s.series+' 部影视 · '+s.episodes+' 集 · '+s.sources+' 个来源文件 · '+s.unique_tracks+' 份去重字幕 · '+s.cues+' 条对白 · '+s.indexed_tracks+' 份已缓存 · '+s.review_files+' 个待检查文件':'字幕数据库尚未配置';const out=el('subtitle-imports');out.replaceChildren();if(s.enabled){out.append(node('p','索引缓存估算 '+(s.cache_estimated_bytes/1024**3).toFixed(2)+' / '+(s.cache_budget_bytes/1024**3).toFixed(0)+' GiB','mb-2'));for(const j of s.index_jobs)out.append(node('p','索引 '+j.language+' · '+j.status+' · '+j.done+'/'+j.total+' · '+j.message));for(const r of s.imports)out.append(node('p','导入 '+r.id+' · '+r.status+' · 已处理 '+r.processed+' · 失败 '+r.failed));}return s.enabled;}
+el('search-subtitles').onclick=()=>guard(async()=>{
+ const lines=el('sentences').value.split('\n').map(s=>s.trim()).filter(Boolean);if(!el('series').value||!lines.length||lines.length>200)throw Error('请选择剧集并输入 1–200 句对白');
+ const button=el('search-subtitles');button.disabled=true;button.textContent='正在查询…';
+ try{const result=await queryReady({series_id:el('series').value,sentences:lines.map((text,i)=>({id:String(i),text,language:el('language').value}))});const out=el('subtitle-results');out.replaceChildren();
+ out.append(node('p','查询耗时 '+result.elapsed_ms+' ms · 有效查询 '+result.queried_sentences+' 句 · '+(result.reliable?'已有字幕候选，待画面确认':'证据不足，需要补充字幕或画面匹配'),'mb-4'));
+ out.append(node('p','语言覆盖：'+result.language_coverage.map(x=>x.language+' '+x.episodes+'/'+result.total_episodes+' 集').join('，'),'mb-4'));
+ if(!result.coverage_complete)out.append(node('p','当前对白语言未覆盖全剧；本次查询未自动翻译。','text-red-600 mb-4'));
+ for(const row of result.ranked){const section=node('section','','bg-white rounded-lg shadow p-4 mb-4');section.append(node('h3',row.episode+' · '+row.hits+' 句 · 得分 '+row.score,'font-bold mb-2'));for(const hit of row.evidence.slice(0,8))section.append(node('p',hit.language+' '+(hit.start_ms/1000).toFixed(2)+' 秒：'+hit.query+' → '+hit.text,'mb-2'));out.append(section);}
+ if(!result.ranked.length)out.append(node('p','没有可靠文本命中。'));
+ }finally{button.disabled=false;button.textContent='查询候选集数';}
+});
+(async()=>{if(!requireAuth())return;await loadApiPrefix();await guard(async()=>{if(await refreshStatus())await shows();});setInterval(()=>{if(!document.hidden)guard(refreshStatus);},15000);})();
+</script>
+{% endblock %}

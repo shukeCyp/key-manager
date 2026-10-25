@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "sqlite:///./data/app.db"
+    SUBTITLE_DATABASE_URL: str = ""
+    SUBTITLE_CACHE_BYTES: int = 8 * 1024**3
 
     # Security
     LOGIN_MAX_ATTEMPTS: int = 5

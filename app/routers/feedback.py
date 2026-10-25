@@ -38,12 +38,12 @@ class Submission(BaseModel):
     contact: str = Field(default='', max_length=200)
 
 
-def identity(request, db):
+def identity(request, db, token_type='feedback'):
     authorization=request.headers.get('authorization','')
     if not authorization.startswith('Bearer '):raise HTTPException(401,'缺少反馈令牌，请先验证卡密')
     try:
         data=jwt.decode(authorization[7:],settings.JWT_SECRET,algorithms=[settings.JWT_ALGORITHM],options={'require':['exp']})
-        if data.get('type')!='feedback' or type(data.get('key_id')) is not int:raise ValueError()
+        if data.get('type')!=token_type or type(data.get('key_id')) is not int:raise ValueError()
         if not isinstance(data.get('machine_code'),str) or not 1<=len(data['machine_code'])<=64:raise ValueError()
     except (jwt.InvalidTokenError,ValueError,TypeError):raise HTTPException(401,'反馈令牌无效或已过期，请重新验证卡密')
     key=db.query(Key).filter_by(id=data['key_id']).first()

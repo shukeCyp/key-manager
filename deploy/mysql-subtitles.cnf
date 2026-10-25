@@ -1,0 +1,15 @@
+[mysqld]
+bind-address=127.0.0.1
+mysqlx-bind-address=127.0.0.1
+character-set-server=utf8mb4
+collation-server=utf8mb4_0900_ai_ci
+innodb_buffer_pool_size=512M
+innodb_redo_log_capacity=128M
+max_connections=35
+tmp_table_size=16M
+max_heap_table_size=16M
+innodb_ft_min_token_size=2
+innodb_ft_enable_stopword=OFF
+local_infile=OFF
+max_allowed_packet=16M
+binlog_expire_logs_seconds=259200

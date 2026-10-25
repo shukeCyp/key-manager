@@ -50,6 +50,10 @@ def verify(req: SignedVerifyRequest, request: Request, db: Session = Depends(get
         result['feedback_token'] = create_token(dict(type='feedback', key_id=key.id,
             app_code=key.application.app_code, machine_code=req.machine_code, client_name=req.client_name),
             dt.timedelta(seconds=max(1, lease_until-now)))
+        if settings.SUBTITLE_DATABASE_URL:
+            result['subtitle_token'] = create_token(dict(type='subtitle_query', key_id=key.id,
+                app_code=key.application.app_code, machine_code=req.machine_code, client_name=req.client_name),
+                dt.timedelta(seconds=max(1, lease_until-now)))
     payload = {**result, "issued_at": now, "lease_until": lease_until, "nonce": req.nonce,
                "app_code": req.app_code, "machine_code": req.machine_code, "client_name": req.client_name,
                "key_fingerprint": hashlib.sha256(req.key_code.encode()).hexdigest()}

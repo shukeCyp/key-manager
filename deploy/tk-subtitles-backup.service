@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup subtitle originals and metadata
+After=mysqld.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/shaohua-license/current/deploy/backup-subtitles.py
+User=root
+Nice=15
+IOSchedulingClass=idle
+UMask=0077

@@ -1,0 +1,21 @@
+[Unit]
+Description=Archive staged subtitle library %i
+After=network.target mysqld.service
+
+[Service]
+Type=exec
+User=shaohua-license
+Group=shaohua-license
+WorkingDirectory=/opt/shaohua-license/current
+EnvironmentFile=/etc/tk-subtitles.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/shaohua-license/venv/bin/python -m tools.import_library_bundle /var/lib/shaohua-license/subtitle-migration/%i --run-id %i
+Nice=10
+CPUQuota=150%
+MemoryMax=512M
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

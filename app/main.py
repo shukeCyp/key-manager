@@ -168,6 +168,8 @@ from app.routers.client_v2 import router as client_router
 client_app.include_router(client_router)
 from app.routers.feedback import client_router as feedback_client_router, admin_router as feedback_admin_router
 client_app.include_router(feedback_client_router)
+from app.routers.subtitles import client_router as subtitle_client_router, admin_router as subtitle_admin_router
+client_app.include_router(subtitle_client_router)
 
 
 @client_app.exception_handler(Exception)
@@ -205,6 +207,7 @@ app.include_router(recycle_router, prefix="/__admin")
 from app.routers.integration import router as integration_router
 app.include_router(integration_router, prefix="/__admin")
 app.include_router(feedback_admin_router, prefix="/__admin")
+app.include_router(subtitle_admin_router, prefix="/__admin")
 
 
 # ── Web page routes ───────────────────────────────

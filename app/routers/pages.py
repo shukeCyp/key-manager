@@ -67,3 +67,8 @@ async def integration_page(request: Request):
 @router.get('/feedback',response_class=HTMLResponse)
 async def feedback_page(request:Request):
     return request.app.state.templates.TemplateResponse(request=request,name='feedback.html',context={'request':request})
+
+
+@router.get('/subtitles',response_class=HTMLResponse)
+async def subtitles_page(request:Request):
+    return request.app.state.templates.TemplateResponse(request=request,name='subtitles.html',context={'request':request})

@@ -1,0 +1,25 @@
+[Unit]
+Description=On-demand show and language subtitle index cache
+After=network.target mysqld.service
+
+[Service]
+User=shaohua-license
+Group=shaohua-license
+WorkingDirectory=/opt/shaohua-license/current
+EnvironmentFile=/etc/tk-subtitles.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/shaohua-license/venv/bin/python -m tools.subtitle_cache_worker
+Restart=on-failure
+RestartSec=5
+Nice=10
+CPUQuota=80%
+MemoryMax=384M
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

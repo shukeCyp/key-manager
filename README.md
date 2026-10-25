@@ -16,6 +16,8 @@
 
 ## Python 接入
 
+共享字幕库已增加独立 MySQL 原文存储、按剧和语言生成的检索缓存、管理页和授权查询 API。表结构、迁移、缓存预算与恢复步骤见 [SUBTITLE_LIBRARY.md](SUBTITLE_LIBRARY.md)。视频和画面索引仍保留在 NAS。
+
 见 [SDK_GUIDE.md](SDK_GUIDE.md)。后台「Python 软件接入」提供本服务器公钥及示例。当前唯一应用为 TK剪辑器，`app_code` 为 `TK_EDITOR`。旧接入编号仍可兼容已有客户端。
 
 ## 开发与测试

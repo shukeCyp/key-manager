@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily subtitle data backup
+
+[Timer]
+OnCalendar=*-*-* 03:10:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

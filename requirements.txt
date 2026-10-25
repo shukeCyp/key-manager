@@ -72,6 +72,7 @@ pyyaml==6.0.3
 qrcode==8.2
     # via -r work/key-manager/requirements.in
 sqlalchemy==2.1.4
+pymysql==1.2.3
     # via -r work/key-manager/requirements.in
 starlette==1.8.0
     # via fastapi
