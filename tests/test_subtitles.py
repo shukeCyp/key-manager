@@ -204,6 +204,22 @@ def test_api_purposes_validation_and_revocation(env,tmp_path,monkeypatch):
     assert sdk.query_subtitles(sid,request['sentences'])['reliable']
     assert client.get('/api/client/subtitles/tracks/'+imported.json()['track_id']+'/sources',headers=query_headers).json()['items'][0]['video_id']=='video1'
     assert client.post('/api/client/subtitles/search',headers=query_headers,content=b'x'*(192*1024+1)).status_code==413
+    from app import media_db
+    from sqlalchemy.orm import Session
+    media_db.Base.metadata.create_all(engine)
+    with Session(engine) as media:
+        media.add(media_db.Work(id='a'*32,identity_key='b'*64,title='Cloud Fixture',kind='series'))
+        media.commit()
+    with monkeypatch.context() as patch:
+        patch.setattr(settings,'MEDIA_SCHEMA_ENABLED',True)
+        patch.setattr(media_db,'engine',lambda:engine)
+        body=dict(work_ids=['a'*32],sentences=[dict(id='s1',text='Your dog barks every morning')])
+        assert client.post('/api/client/media/search',headers=feedback_headers,json=body).status_code==401
+        assert client.post('/api/client/media/search',headers=auth,json=body).status_code==401
+        result=client.post('/api/client/media/search',headers=query_headers,json=body)
+        assert result.status_code==200 and result.json()['index_ready']
+        assert not result.json()['ranked']
+        assert client.post('/api/client/media/search',headers=query_headers,content=b'x'*(192*1024+1)).status_code==413
     from app.models import Key
     with factory() as db:
         key=db.query(Key).filter_by(key_code=card).one();key.status='disabled';db.commit()

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}共享字幕库 — TK剪辑器{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-bold mb-4">共享字幕库</h1>
-<p class="text-gray-500 mb-4">按剧集、语言保存字幕。原片和画面索引仍保留在共享素材库。</p>
+<h1 class="text-2xl font-bold mb-4">影视资源库</h1>
+<p class="text-gray-500 mb-4">统一查询影视、视频音轨、多语言字幕和逐句对白。原片保留在 NAS。</p>
 <p id="subtitle-error" role="alert" class="text-red-600 mb-4"></p>
 <div id="subtitle-status" class="bg-white rounded-lg shadow p-4 mb-4">正在读取…</div>
 <div id="subtitle-imports" class="bg-white rounded-lg shadow p-4 mb-4"></div>
@@ -16,6 +16,7 @@
  <p class="text-gray-500 mt-4">查询会过滤过短的通用对白。同一语言字幕不足时会显示覆盖缺口，集数最终由画面匹配确认。</p>
 </section>
 <div id="subtitle-results"></div>
+<section class="bg-white rounded-lg shadow p-4 mb-4"><h2 class="text-lg font-bold mb-2">本剧视频与字幕文件</h2><button id="resource-show" class="border rounded px-3 py-2">查看所选影视资源</button><div id="resource-files" class="mt-4"></div><button id="resource-next" class="border rounded px-3 py-2 mt-2" hidden>下一页</button></section>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -27,10 +28,25 @@ async function guard(fn){el('subtitle-error').textContent='';try{await fn();}cat
 async function queryReady(body){for(let attempt=0;attempt<120;attempt++){const r=await request('/search',body);if(r.index_ready!==false)return r;const p=r.index_progress||[];el('subtitle-results').textContent='正在准备本剧字幕索引：'+p.map(j=>j.language+' '+j.done+'/'+j.total+' '+j.message).join('；');if(p.some(j=>j.status==='failed'))throw Error('索引准备失败，请查看任务信息后重试');await new Promise(resolve=>setTimeout(resolve,5000));}throw Error('索引仍在后台准备，稍后再次查询即可');}
 el('find-show').onclick=()=>guard(shows);
 let reviewPage=1;
+let resourceOffset=0;
+async function resourceFiles(){if(!el('series').value)throw Error('请先选择影视');const r=await AUTH.fetch(apiUrl('/media/works/'+encodeURIComponent(el('series').value)+'/files?limit=30&offset='+resourceOffset));const data=await r.json();if(!r.ok)throw Error(data.detail||'资源查询失败');const out=el('resource-files');out.replaceChildren();for(const f of data.items){out.append(node('p',f.path,'font-bold mb-2'));out.append(node('p',f.episodes.map(e=>e.code+' · '+e.match_status).join('，'),'mb-2'));out.append(node('p',f.tracks.map(t=>(t.kind==='audio'?'音轨':'字幕')+' '+t.language+' · '+t.source+(t.is_default?' · 默认':'')).join('；')||'轨道尚未识别','mb-4'));}if(!data.items.length)out.append(node('p','暂无关联文件，或正在识别归属'));el('resource-next').hidden=data.items.length<30;}
+el('resource-show').onclick=()=>guard(async()=>{resourceOffset=0;await resourceFiles();});
+el('resource-next').onclick=()=>guard(async()=>{resourceOffset+=30;await resourceFiles();});
 async function reviews(){const r=await request('/review?page='+reviewPage);const out=el('review-files');out.replaceChildren(node('p','第 '+reviewPage+' 页'));for(const row of r.items)out.append(node('p',row.path+' · '+row.reason,'mb-2'));if(!r.items.length)out.append(node('p','没有待检查文件'));el('review-next').hidden=r.items.length<30;}
 el('show-review').onclick=()=>guard(async()=>{reviewPage=1;await reviews();});
 el('review-next').onclick=()=>guard(async()=>{reviewPage++;await reviews();});
-async function refreshStatus(){const s=await request('/status');el('subtitle-status').textContent=s.enabled?s.series+' 部影视 · '+s.episodes+' 集 · '+s.sources+' 个来源文件 · '+s.unique_tracks+' 份去重字幕 · '+s.cues+' 条对白 · '+s.indexed_tracks+' 份已缓存 · '+s.review_files+' 个待检查文件':'字幕数据库尚未配置';const out=el('subtitle-imports');out.replaceChildren();if(s.enabled){out.append(node('p','索引缓存估算 '+(s.cache_estimated_bytes/1024**3).toFixed(2)+' / '+(s.cache_budget_bytes/1024**3).toFixed(0)+' GiB','mb-2'));for(const j of s.index_jobs)out.append(node('p','索引 '+j.language+' · '+j.status+' · '+j.done+'/'+j.total+' · '+j.message));for(const r of s.imports)out.append(node('p','导入 '+r.id+' · '+r.status+' · 已处理 '+r.processed+' · 失败 '+r.failed));}return s.enabled;}
+async function refreshStatus(){
+ const s=await request('/status');const out=el('subtitle-imports');out.replaceChildren();
+ if(!s.enabled){el('subtitle-status').textContent='字幕数据库尚未配置';return false;}
+ el('subtitle-status').textContent=s.schema_version===1?
+  s.works+' 部影视 · '+s.videos+' 个视频 · '+s.audio_tracks+' 条音轨 · '+s.subtitle_files+' 个字幕文件 · '+s.parsed_subtitles+' 份已解析字幕 · '+s.cues+' 条已入库字幕记录':
+  s.series+' 部影视 · '+s.episodes+' 集 · '+s.sources+' 个来源文件 · '+s.unique_tracks+' 份去重字幕 · '+s.cues+' 条对白';
+ if(s.schema_version===1)out.append(node('p','文件、轨道、影视归属和字幕正文分阶段补齐。影视归属为模型候选；同集字幕尚未确认适配每个视频版本。','mb-2'));
+ out.append(node('p','索引缓存估算 '+(s.cache_estimated_bytes/1024**3).toFixed(2)+' / '+(s.cache_budget_bytes/1024**3).toFixed(0)+' GiB','mb-2'));
+ for(const j of s.index_jobs)out.append(node('p','索引 '+j.language+' · '+j.status+' · '+j.done+'/'+j.total+' · '+j.message));
+ for(const r of s.imports)out.append(node('p','导入 '+r.id+' · '+r.status+' · 已处理 '+r.processed+' · 失败 '+r.failed));
+ return true;
+}
 el('search-subtitles').onclick=()=>guard(async()=>{
  const lines=el('sentences').value.split('\n').map(s=>s.trim()).filter(Boolean);if(!el('series').value||!lines.length||lines.length>200)throw Error('请选择剧集并输入 1–200 句对白');
  const button=el('search-subtitles');button.disabled=true;button.textContent='正在查询…';

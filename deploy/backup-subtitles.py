@@ -8,8 +8,11 @@ name=datetime.now().strftime('%Y%m%d-%H%M%S')
 folder=root/name;folder.mkdir(mode=0o700)
 temporary=folder/'subtitles.sql.gz.tmp';target=folder/'subtitles.sql.gz'
 common=['mysqldump','--single-transaction','--set-gtid-purged=OFF','--no-tablespaces','--hex-blob']
+tables=subprocess.check_output(['mysql','-N','-e',"SELECT table_name FROM information_schema.tables WHERE table_schema='tk_subtitles'"],text=True).split()
+seven=set(tables)=={'works','work_names','episodes','files','episode_files','tracks','subtitle_cues'}
 with gzip.open(temporary,'wb',compresslevel=4) as output:
-    for args in [common+['--ignore-table=tk_subtitles.subtitle_windows','tk_subtitles'],common+['--no-data','tk_subtitles','subtitle_windows']]:
+    commands=[common+['tk_subtitles']] if seven else [common+['--ignore-table=tk_subtitles.subtitle_windows','tk_subtitles'],common+['--no-data','tk_subtitles','subtitle_windows']]
+    for args in commands:
         process=subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         shutil.copyfileobj(process.stdout,output,1024*1024)
         stderr=process.stderr.read();code=process.wait()

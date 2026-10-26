@@ -73,7 +73,7 @@ class ImportFile(BaseModel):
     aliases: list[str] = Field(default_factory=list, max_length=30)
     year: int | None = Field(default=None, ge=1880, le=2200)
     episode: str = Field(pattern=r'^(S\d{2,3}E\d{2,4}|MOVIE)$')
-    language: str = Field(pattern=r'^[a-z]{2,3}(-[a-z0-9]{2,8})?$')
+    language: str = Field(pattern=r'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$')
     language_source: str = Field(default='filename', pattern=r'^(filename|script|manual|unknown)$')
     root: str = Field(min_length=1, max_length=1024)
     relative_path: str = Field(min_length=1, max_length=4096)
@@ -174,7 +174,7 @@ class Sentence(BaseModel):
     text: str = Field(min_length=1, max_length=500)
     narrator: bool = False
     # One original sentence can supply translated variants under the same id.
-    language: str = Field(pattern=r'^[a-z]{2,3}(-[a-z0-9]{2,8})?$')
+    language: str = Field(pattern=r'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$')
 
 
 class Search(BaseModel):

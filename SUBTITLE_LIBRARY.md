@@ -1,5 +1,63 @@
 # 共享字幕库
 
+2026-10-26：TkEdit 自动原片查找已接入固定的许可查询接口。`GET /api/client/media/works?q=...`
+返回多语言别名；`GET /api/client/media/works/{id}/files?kind=video&limit=200&offset=0`
+分页取得视频及音轨，不再要求客户端下载共享字幕 SQLite。
+`POST /api/client/media/search` 接收 `work_ids`（1～20个同剧候选记录）和 `sentences`
+（每批最多200句、每句500字、正文最大192KiB）。每句含 `id`、`text`、`narrator`，
+可选 `language`；省略语言时查询全部已有语言，不进行隐式机器翻译。
+相同原句的翻译或分段使用同一 `id`，每集仅投一票；保留匹配字幕的语言、路径、毫秒时间和原文证据。
+当前查询直接分批读取所选剧集的原始字幕，同一批所有对白共用一次扫描；内存中拼接最多三条相邻字幕，
+保留精确与 ASR 模糊匹配。无需生成持久检索窗口或等待整剧缓存，旧缓存失败不影响原文查询。
+返回 `search_mode=direct`、`scanned_cues` 和 `elapsed_ms`；兼容字段 `index_ready=true`、
+`index_progress=[]`，`index_total/index_done` 代表本次可读的原文轨数，不代表持久索引状态。
+查询全程只读；不同语言、重复台词位置和整份字幕的所有来源映射继续保留。
+数据库表结构不变，原管理员 `/subtitles` 接口与旧客户端接口继续兼容。
+
+## 当前版本：七表影视资源库（2026-10-25）
+
+按用户要求，旧云端字幕数据已清空；`tk_subtitles` 现在仅有以下7张业务表：
+
+| 表 | 内容 |
+| --- | --- |
+| `works` | 影视名称、原文名、类型、年份、候选状态与依据；稳定 identity_key 防止并发重复创建 |
+| `work_names` | 中英文、其他语言名称及别名；允许同名对应不同作品 |
+| `episodes` | 季集；电影为 MOVIE，季集不明为 UNKNOWN，数字字段为空 |
+| `files` | NAS 视频和字幕路径、大小、修改时间、可用及探测状态；路径哈希唯一 |
+| `episode_files` | 文件与季集的多对多归属、置信度、待确认状态 |
+| `tracks` | 视频音轨、内嵌字幕和外挂字幕；保留原始语言标记及语言来源 |
+| `subtitle_cues` | 原始逐句正文和时间码；同表的 search_* 列为可重建缓存 |
+
+数据库DDL见 `deploy/media-schema.sql`；生产仅由管理脚本建表，服务账户不持有DDL权限。
+仅整份字幕的全部正文、时间轴和顺序完全一致时，按 content_hash 复用存储，副本轨道通过 tracks.content_ref_id 引用原文轨；
+读取字幕时使用 `COALESCE(tracks.content_ref_id, tracks.id)` 关联 subtitle_cues。
+不按单句台词去重，同一句出现在不同作品、集数或时间点都保留对应位置。
+同一视频的所有语言 SRT 均独立登记文件、语言和季集关联并解析正文，不按默认音轨或字幕语言筛掉文件。
+查询指定语言时只筛对应语言，不指定语言时覆盖该作品已有的全部字幕语言；完全相同正文的副本命中会展开返回各自位置（受单次结果上限约束）。
+多个 NAS 路径和语言标记分别保留，不因正文重复删除来源。
+
+本机以 `mimo-v2.6-flash` 按目录识别影视和季集。音轨来自 ffprobe，字幕正文由本地解析。
+模型归属标记为 model_candidate，未知季集标记 needs_review，不将同集文件视为已校准版本。
+字幕文件存在、正文解析成功、检索索引就绪是独立状态。
+
+当前接口：
+
+- 管理前缀下 `GET /media/status`、`GET /media/works?q=...`。
+- `GET /media/works/{id}/files?audio_language=ja&subtitle_language=zh-Hans&offset=0&limit=100`。
+- `GET /media/cues?work_id=...&q=...&language=...`；直接查询本剧原文，无需缓存。
+- 固定 `/api/client/media/ingest/{metadata|classify|subtitles}` 为采集写入接口；专用令牌只允许这些接口。
+- 客户端资源查询沿用短期字幕授权；旧 `/subtitles` 查询/管理页面已适配七表结构，旧导入接口返回409。
+
+采集令牌在服务器只保存SHA-256，本机使用DPAPI加密；不会公开MySQL账户或管理员密码。
+采集POST在Nginx单独放宽到12MiB，应用仍限制10MiB；其他接口的请求限制不变。
+七表查询已取消按需持久缓存前置步骤，原缓存构建服务停用；旧 search_* 字段保留便于回退，不在查询中读取或重写。
+原始字幕入库仍在磁盘少于10GiB时拒绝继续增长。
+备份服务已支持七表，清空前恢复备份保留于 `/var/backups/tk-subtitles/20261025-171818/subtitles.sql.gz`。
+清空前后计数和表集合记录于同目录 `seven-table-reset.json`。
+授权SQLite及签名密钥独立于本次字幕库重建。
+
+**以下为旧版九表实现与历史迁移实测，数据量和结构不代表当前重建后的实时状态。**
+
 字幕正文、语言、剧集归属和查询放到服务器；视频、音频轨、SSCD 画面索引继续在 NAS。
 授权数据库继续使用原 SQLite，与新的 `tk_subtitles` MySQL 数据库隔离。字幕库故障不会阻止授权服务启动或验证卡密。
 

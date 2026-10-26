@@ -54,12 +54,16 @@ async def payload(request,model,maximum):
 
 @admin_router.post('/files')
 async def import_file(request:Request):
+    if settings.MEDIA_SCHEMA_ENABLED:raise HTTPException(409,'旧字幕导入已停用，请使用七表采集接口')
     value=await payload(request,service.ImportFile,8*1024*1024)
     return await run_in_threadpool(call,partial(service.import_file,build_index=False),value,write=True)
 
 
 @admin_router.get('/series')
 def series(q:str=Query('',max_length=255)):
+    if settings.MEDIA_SCHEMA_ENABLED:
+        from app.media_catalog import list_works
+        return dict(items=call(list_works,q))
     return dict(items=call(service.list_series,q))
 
 
@@ -69,6 +73,13 @@ def client_series(q:str=Query(min_length=2,max_length=255)):
 
 
 def sources_for_track(db,track_id):
+    if settings.MEDIA_SCHEMA_ENABLED:
+        from app import media_db as m
+        track=db.get(m.Track,track_id)
+        if not track:raise ValueError('字幕轨不存在')
+        file=db.get(m.File,track.file_id)
+        return [dict(library_id='media',subtitle_id=file.id,video_id=track.bound_video_id,
+            root='',relative_path=file.path,video_relative_path=None,pairing=track.binding_status,revision='media-v1')]
     if not db.get(store.Track,track_id):raise ValueError('字幕轨不存在')
     return [dict(library_id=s.library_id,subtitle_id=s.external_id,video_id=s.video_id,
                  root=s.root,relative_path=s.relative_path,video_relative_path=s.video_relative_path,
@@ -85,6 +96,9 @@ def track_sources(track_id:str):
 @admin_router.post('/search')
 async def search(request:Request):
     value=await payload(request,service.Search,192*1024)
+    if settings.MEDIA_SCHEMA_ENABLED:
+        from app.media_search import legacy_search
+        return await run_in_threadpool(call,legacy_search,value,write=True)
     return await run_in_threadpool(call,service.search,value)
 
 
@@ -94,6 +108,19 @@ async def client_search(request:Request):
 
 
 def statistics(db):
+    if settings.MEDIA_SCHEMA_ENABLED:
+        from app import media_db as m
+        from app.media_catalog import statistics as media_statistics
+        result=media_statistics(db)
+        return dict(result,series=result['works'],sources=result['subtitle_files'],unique_tracks=db.scalar(
+            select(func.count()).select_from(m.Track).where(m.Track.kind=='subtitle')),
+            cues=result['subtitle_cues'],review_files=db.scalar(select(func.count()).select_from(m.File).where(m.File.error.is_not(None))),
+            indexed_tracks=db.scalar(select(func.count()).select_from(m.Track).where(m.Track.index_state=='ready')),
+            cache_budget_bytes=settings.SUBTITLE_CACHE_BYTES,cache_estimated_bytes=int(db.scalar(select(func.coalesce(func.sum(m.Track.index_bytes),0)))),
+            index_jobs=[dict(language=t.language,status=t.index_state,done=0,total=t.cue_count,message=t.error or '') for t in db.scalars(
+                select(m.Track).where(m.Track.index_state.in_(['pending','building','failed'])).limit(20))],imports=[],
+            languages=[dict(language=lang,tracks=n) for lang,n in db.execute(select(m.Track.language,func.count()).where(
+                m.Track.kind=='subtitle').group_by(m.Track.language))])
     return dict(series=db.scalar(select(func.count()).select_from(store.Series)),
                 episodes=db.scalar(select(func.count()).select_from(store.Episode)),
                 unique_tracks=db.scalar(select(func.count()).select_from(store.Track)),
@@ -117,5 +144,9 @@ def status():
 @admin_router.get('/review')
 def review(page:int=Query(1,ge=1)):
     def listing(db):
+        if settings.MEDIA_SCHEMA_ENABLED:
+            from app import media_db as m
+            return dict(items=[dict(id=f.id,path=f.path,reason=f.error) for f in db.scalars(select(m.File).where(
+                m.File.error.is_not(None)).order_by(m.File.id).offset((page-1)*30).limit(30))])
         return dict(items=[dict(id=r.id,path=r.relative_path,reason=r.reason) for r in db.scalars(select(store.ReviewFile).order_by(store.ReviewFile.id).offset((page-1)*30).limit(30))])
     return call(listing)
